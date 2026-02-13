@@ -227,6 +227,8 @@ def run_weekly_backtest_phase2(
     underlying_ltp_series: "pd.Series | None" = None,
     strike_gap: int = 100,
     strike_range: int = 15,
+    phase3_trigger_premium: float | None = None,
+    phase3_target_reentry: float = 55.0,
 ):
     """
     Stateful backtest with Phase 2:
@@ -369,13 +371,19 @@ def run_weekly_backtest_phase2(
 
         # ---- Trigger: short CE > trigger -> cover put pair, re-enter put pair ----
         if close_ce_short is not None and float(close_ce_short) > trigger_premium:
+            # Phase 3: if short CE > phase3_trigger, use phase3 target; else Phase 2 target
+            use_phase3 = (
+                phase3_trigger_premium is not None and float(close_ce_short) > phase3_trigger_premium
+            )
+            reentry_target = phase3_target_reentry if use_phase3 else target_reentry_premium
+            phase_label = "[Phase3]" if use_phase3 else "[Phase2]"
             c_pe = float(close_pe_short) if close_pe_short is not None else (entry_pe_short or 0.0)
             c_pe_h = float(close_pe_hedge) if close_pe_hedge is not None else (entry_pe_hedge or 0.0)
             if entry_pe_short is not None:
                 round_pnl = (entry_pe_short - c_pe) * lot_pe_short + (c_pe_h - entry_pe_hedge) * lot_pe_hedge
                 cumulative_realized += round_pnl
-                print(f"[Phase2] {ts} | CE trigger: short_ce_close={close_ce_short:.2f} > {trigger_premium}")
-                print(f"[Phase2]   Cover PUT pair: short_pe_close={c_pe:.2f} (entry={entry_pe_short:.2f}), "
+                print(f"{phase_label} {ts} | CE trigger: short_ce_close={close_ce_short:.2f} > {trigger_premium}")
+                print(f"{phase_label}   Cover PUT pair: short_pe_close={c_pe:.2f} (entry={entry_pe_short:.2f}), "
                       f"hedge_pe_close={c_pe_h:.2f} (entry={entry_pe_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
 
@@ -383,11 +391,11 @@ def run_weekly_backtest_phase2(
             ltp_now = _get_ltp_at(ts)
             new_pe, new_pe_prem, new_pe_hedge_prem = _find_best_strike(
                 pe_short_filled, pe_hedge_filled, pe_short_lots, pe_hedge_lots,
-                ts, target_reentry_premium, ltp_now, "PE",
+                ts, reentry_target, ltp_now, "PE",
             )
             if new_pe is not None:
                 atm_now = round(ltp_now / strike_gap) * strike_gap if ltp_now else "N/A"
-                print(f"[Phase2]   Re-entry PE: LTP={ltp_now}, ATM={atm_now}, "
+                print(f"{phase_label}   Re-entry PE: LTP={ltp_now}, ATM={atm_now}, "
                       f"new_strike={new_pe}, premium={new_pe_prem:.2f}, "
                       f"hedge_strike={new_pe - hedge_difference}, hedge_premium={new_pe_hedge_prem}")
                 pe_short_strike = new_pe
@@ -403,24 +411,30 @@ def run_weekly_backtest_phase2(
 
         # ---- Trigger: short PE > trigger -> cover call pair, re-enter call pair ----
         if close_pe_short is not None and float(close_pe_short) > trigger_premium:
+            # Phase 3: if short PE > phase3_trigger, use phase3 target; else Phase 2 target
+            use_phase3 = (
+                phase3_trigger_premium is not None and float(close_pe_short) > phase3_trigger_premium
+            )
+            reentry_target = phase3_target_reentry if use_phase3 else target_reentry_premium
+            phase_label = "[Phase3]" if use_phase3 else "[Phase2]"
             c_ce = float(close_ce_short) if close_ce_short is not None else (entry_ce_short or 0.0)
             c_ce_h = float(close_ce_hedge) if close_ce_hedge is not None else (entry_ce_hedge or 0.0)
             if entry_ce_short is not None:
                 round_pnl = (entry_ce_short - c_ce) * lot_ce_short + (c_ce_h - entry_ce_hedge) * lot_ce_hedge
                 cumulative_realized += round_pnl
-                print(f"[Phase2] {ts} | PE trigger: short_pe_close={close_pe_short:.2f} > {trigger_premium}")
-                print(f"[Phase2]   Cover CALL pair: short_ce_close={c_ce:.2f} (entry={entry_ce_short:.2f}), "
+                print(f"{phase_label} {ts} | PE trigger: short_pe_close={close_pe_short:.2f} > {trigger_premium}")
+                print(f"{phase_label}   Cover CALL pair: short_ce_close={c_ce:.2f} (entry={entry_ce_short:.2f}), "
                       f"hedge_ce_close={c_ce_h:.2f} (entry={entry_ce_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
 
             ltp_now = _get_ltp_at(ts)
             new_ce, new_ce_prem, new_ce_hedge_prem = _find_best_strike(
                 ce_short_filled, ce_hedge_filled, ce_short_lots, ce_hedge_lots,
-                ts, target_reentry_premium, ltp_now, "CE",
+                ts, reentry_target, ltp_now, "CE",
             )
             if new_ce is not None:
                 atm_now = round(ltp_now / strike_gap) * strike_gap if ltp_now else "N/A"
-                print(f"[Phase2]   Re-entry CE: LTP={ltp_now}, ATM={atm_now}, "
+                print(f"{phase_label}   Re-entry CE: LTP={ltp_now}, ATM={atm_now}, "
                       f"new_strike={new_ce}, premium={new_ce_prem:.2f}, "
                       f"hedge_strike={new_ce + hedge_difference}, hedge_premium={new_ce_hedge_prem}")
                 ce_short_strike = new_ce
