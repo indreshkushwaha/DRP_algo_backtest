@@ -34,12 +34,15 @@ HEDGE_DIFFERENCE = 300  # long call/put at short_strike + this (e.g. short 85000
 SQUARE_OFF_WHEN_SHORT_BELOW = 145.0  # when short leg close <= this, square off both legs and re-enter same pair; None to disable
 SHORT_PAIR = True  # True: short CE + hedge CE + short PE + hedge PE at same entry/target; False: single option (OPTION_TYPE)
 # Phase 2: when short CE > trigger, cover put pair and re-enter put at premium ~ target_reentry; when short PE > trigger, cover call pair and re-enter call at target_reentry
-PHASE2_TRIGGER_PREMIUM = 78.0  # trigger when short leg close > this; None to disable Phase 2
+PHASE2_TRIGGER_PREMIUM = 68.0  # trigger when short leg close > this; None to disable Phase 2
 PHASE2_TARGET_REENTRY = 50.0   # target premium when re-entering the other pair
 PHASE2_STRIKE_RANGE = 15       # ATM ± this many strike_gap steps for multi-strike pre-fetch
 # Phase 3: when short leg > this trigger, re-enter other pair at Phase 3 target (higher tier than Phase 2)
-PHASE3_TRIGGER_PREMIUM = 118.0  # trigger when short leg close > this; use Phase 3 re-entry target; None to disable
-PHASE3_TARGET_REENTRY = 55.0    # target premium when re-entering under Phase 3
+PHASE3_TRIGGER_PREMIUM = 98.0  # trigger when short leg close > this; use Phase 3 re-entry target; None to disable
+PHASE3_TARGET_REENTRY = 45.0    # target premium when re-entering under Phase 3
+# Phase 4: when short leg > this trigger and side is in Phase 3, re-enter once at Phase 4 target; None to disable
+PHASE4_TRIGGER_PREMIUM = 115   # float or None
+PHASE4_TARGET_REENTRY = 65.0    # used when Phase 4 trigger is set and exceeded
 OUTPUT_EXCEL = "backtest_results_fixed.xlsx"
 
 
@@ -342,6 +345,8 @@ def run(
     phase2_strike_range: int = 15,
     phase3_trigger_premium: float | None = None,
     phase3_target_reentry: float = 55.0,
+    phase4_trigger_premium: float | None = None,
+    phase4_target_reentry: float = 60.0,
 ) -> None:
     """
     Find instrument(s) to short and run backtest; save result to Excel.
@@ -489,6 +494,8 @@ def run(
                     strike_range=phase2_strike_range,
                     phase3_trigger_premium=phase3_trigger_premium,
                     phase3_target_reentry=phase3_target_reentry,
+                    phase4_trigger_premium=phase4_trigger_premium,
+                    phase4_target_reentry=phase4_target_reentry,
                 )
         else:
             result_df = main.run_weekly_backtest(
@@ -624,4 +631,6 @@ if __name__ == "__main__":
         phase2_strike_range=PHASE2_STRIKE_RANGE,
         phase3_trigger_premium=PHASE3_TRIGGER_PREMIUM,
         phase3_target_reentry=PHASE3_TARGET_REENTRY,
+        phase4_trigger_premium=PHASE4_TRIGGER_PREMIUM,
+        phase4_target_reentry=PHASE4_TARGET_REENTRY,
     )

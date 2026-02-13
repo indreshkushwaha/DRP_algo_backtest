@@ -229,9 +229,11 @@ def run_weekly_backtest_phase2(
     strike_range: int = 15,
     phase3_trigger_premium: float | None = None,
     phase3_target_reentry: float = 55.0,
+    phase4_trigger_premium: float | None = None,
+    phase4_target_reentry: float = 60.0,
 ):
     """
-    Stateful backtest with Phase 2:
+    Stateful backtest with phase-based re-entry:
       - When short CE close > trigger: cover put pair, realize PnL, use underlying LTP at that
         bar to compute ATM, restrict PE candidates to [ATM - N*gap, ATM + N*gap], pick strike
         with premium closest to target_reentry, re-enter new put pair.
@@ -269,6 +271,13 @@ def run_weekly_backtest_phase2(
     pe_short_filled = filled_series(pe_short_candles)
     pe_hedge_filled = filled_series(pe_hedge_candles)
 
+    # Phase config: list of (trigger, target) for phases 2, 3, 4 (only run re-entry when transitioning to next phase)
+    phase_config = [(trigger_premium, target_reentry_premium)]
+    if phase3_trigger_premium is not None:
+        phase_config.append((phase3_trigger_premium, phase3_target_reentry))
+    if phase4_trigger_premium is not None:
+        phase_config.append((phase4_trigger_premium, phase4_target_reentry))
+
     # State
     ce_short_strike = initial_ce_short_strike
     pe_short_strike = initial_pe_short_strike
@@ -277,6 +286,8 @@ def run_weekly_backtest_phase2(
     entry_pe_short = None
     entry_pe_hedge = None
     cumulative_realized = 0.0
+    put_pair_phase = 1   # 1 = initial; advance when short CE exceeds next phase trigger
+    call_pair_phase = 1  # 1 = initial; advance when short PE exceeds next phase trigger
 
     rows = []
     reentry_ce = 0
@@ -369,25 +380,26 @@ def run_weekly_backtest_phase2(
         lot_pe_short = pe_short_lots.get(pe_short_strike, 0)
         lot_pe_hedge = pe_hedge_lots.get(pe_short_strike, 0)
 
-        # ---- Trigger: short CE > trigger -> cover put pair, re-enter put pair ----
-        if close_ce_short is not None and float(close_ce_short) > trigger_premium:
-            # Phase 3: if short CE > phase3_trigger, use phase3 target; else Phase 2 target
-            use_phase3 = (
-                phase3_trigger_premium is not None and float(close_ce_short) > phase3_trigger_premium
-            )
-            reentry_target = phase3_target_reentry if use_phase3 else target_reentry_premium
-            phase_label = "[Phase3]" if use_phase3 else "[Phase2]"
+        # ---- Phase-based: short CE exceeds next phase trigger -> cover put pair, re-enter put once ----
+        if (
+            close_ce_short is not None
+            and put_pair_phase <= len(phase_config)
+            and float(close_ce_short) > phase_config[put_pair_phase - 1][0]
+        ):
+            next_phase = put_pair_phase + 1
+            phase_label = f"[Phase{next_phase}]"
+            reentry_target = phase_config[put_pair_phase - 1][1]
+            trigger_val = phase_config[put_pair_phase - 1][0]
             c_pe = float(close_pe_short) if close_pe_short is not None else (entry_pe_short or 0.0)
             c_pe_h = float(close_pe_hedge) if close_pe_hedge is not None else (entry_pe_hedge or 0.0)
             if entry_pe_short is not None:
                 round_pnl = (entry_pe_short - c_pe) * lot_pe_short + (c_pe_h - entry_pe_hedge) * lot_pe_hedge
                 cumulative_realized += round_pnl
-                print(f"{phase_label} {ts} | CE trigger: short_ce_close={close_ce_short:.2f} > {trigger_premium}")
+                print(f"{phase_label} {ts} | CE trigger: short_ce_close={close_ce_short:.2f} > {trigger_val}")
                 print(f"{phase_label}   Cover PUT pair: short_pe_close={c_pe:.2f} (entry={entry_pe_short:.2f}), "
                       f"hedge_pe_close={c_pe_h:.2f} (entry={entry_pe_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
 
-            # Find new PE strike using LTP at this timestamp
             ltp_now = _get_ltp_at(ts)
             new_pe, new_pe_prem, new_pe_hedge_prem = _find_best_strike(
                 pe_short_filled, pe_hedge_filled, pe_short_lots, pe_hedge_lots,
@@ -405,24 +417,27 @@ def run_weekly_backtest_phase2(
                 close_pe_hedge = entry_pe_hedge
                 lot_pe_short = pe_short_lots.get(pe_short_strike, lot_pe_short)
                 lot_pe_hedge = pe_hedge_lots.get(pe_short_strike, lot_pe_hedge)
+                put_pair_phase = next_phase
                 reentry_pe += 1
             else:
-                print(f"[Phase2]   WARNING: No PE strike found for re-entry at {ts}")
+                print(f"{phase_label}   WARNING: No PE strike found for re-entry at {ts}")
 
-        # ---- Trigger: short PE > trigger -> cover call pair, re-enter call pair ----
-        if close_pe_short is not None and float(close_pe_short) > trigger_premium:
-            # Phase 3: if short PE > phase3_trigger, use phase3 target; else Phase 2 target
-            use_phase3 = (
-                phase3_trigger_premium is not None and float(close_pe_short) > phase3_trigger_premium
-            )
-            reentry_target = phase3_target_reentry if use_phase3 else target_reentry_premium
-            phase_label = "[Phase3]" if use_phase3 else "[Phase2]"
+        # ---- Phase-based: short PE exceeds next phase trigger -> cover call pair, re-enter call once ----
+        if (
+            close_pe_short is not None
+            and call_pair_phase <= len(phase_config)
+            and float(close_pe_short) > phase_config[call_pair_phase - 1][0]
+        ):
+            next_phase = call_pair_phase + 1
+            phase_label = f"[Phase{next_phase}]"
+            reentry_target = phase_config[call_pair_phase - 1][1]
+            trigger_val = phase_config[call_pair_phase - 1][0]
             c_ce = float(close_ce_short) if close_ce_short is not None else (entry_ce_short or 0.0)
             c_ce_h = float(close_ce_hedge) if close_ce_hedge is not None else (entry_ce_hedge or 0.0)
             if entry_ce_short is not None:
                 round_pnl = (entry_ce_short - c_ce) * lot_ce_short + (c_ce_h - entry_ce_hedge) * lot_ce_hedge
                 cumulative_realized += round_pnl
-                print(f"{phase_label} {ts} | PE trigger: short_pe_close={close_pe_short:.2f} > {trigger_premium}")
+                print(f"{phase_label} {ts} | PE trigger: short_pe_close={close_pe_short:.2f} > {trigger_val}")
                 print(f"{phase_label}   Cover CALL pair: short_ce_close={c_ce:.2f} (entry={entry_ce_short:.2f}), "
                       f"hedge_ce_close={c_ce_h:.2f} (entry={entry_ce_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
@@ -444,9 +459,10 @@ def run_weekly_backtest_phase2(
                 close_ce_hedge = entry_ce_hedge
                 lot_ce_short = ce_short_lots.get(ce_short_strike, lot_ce_short)
                 lot_ce_hedge = ce_hedge_lots.get(ce_short_strike, lot_ce_hedge)
+                call_pair_phase = next_phase
                 reentry_ce += 1
             else:
-                print(f"[Phase2]   WARNING: No CE strike found for re-entry at {ts}")
+                print(f"{phase_label}   WARNING: No CE strike found for re-entry at {ts}")
 
         # Current lot sizes (may have changed after re-entry)
         lot_ce_short = ce_short_lots.get(ce_short_strike, 0)
@@ -483,7 +499,8 @@ def run_weekly_backtest_phase2(
             "total_pnl": total_pnl,
         })
 
-    print(f"[Phase2] Backtest complete: reentry_ce={reentry_ce}, reentry_pe={reentry_pe}, "
+    print(f"Backtest complete: reentry_ce={reentry_ce}, reentry_pe={reentry_pe}, "
+          f"put_pair_phase={put_pair_phase}, call_pair_phase={call_pair_phase}, "
           f"final cumulative_realized={cumulative_realized:.2f}")
 
     result_df = pd.DataFrame(rows, index=timeline)
