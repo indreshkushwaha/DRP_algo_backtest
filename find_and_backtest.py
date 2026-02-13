@@ -43,6 +43,8 @@ PHASE3_TARGET_REENTRY = 45.0    # target premium when re-entering under Phase 3
 # Phase 4: when short leg > this trigger and side is in Phase 3, re-enter once at Phase 4 target; None to disable
 PHASE4_TRIGGER_PREMIUM = 115   # float or None
 PHASE4_TARGET_REENTRY = 65.0    # used when Phase 4 trigger is set and exceeded
+# Stoploss: when total PnL (realized + unrealized) is loss more than this amount, square off all positions; None to disable
+STOPLOSS_AMOUNT = 5000  # e.g. 5000.0
 OUTPUT_EXCEL = "backtest_results_fixed.xlsx"
 
 
@@ -347,6 +349,7 @@ def run(
     phase3_target_reentry: float = 55.0,
     phase4_trigger_premium: float | None = None,
     phase4_target_reentry: float = 60.0,
+    stoploss_amount: float | None = None,
 ) -> None:
     """
     Find instrument(s) to short and run backtest; save result to Excel.
@@ -496,6 +499,7 @@ def run(
                     phase3_target_reentry=phase3_target_reentry,
                     phase4_trigger_premium=phase4_trigger_premium,
                     phase4_target_reentry=phase4_target_reentry,
+                    stoploss_amount=stoploss_amount,
                 )
         else:
             result_df = main.run_weekly_backtest(
@@ -633,4 +637,5 @@ if __name__ == "__main__":
         phase3_target_reentry=PHASE3_TARGET_REENTRY,
         phase4_trigger_premium=PHASE4_TRIGGER_PREMIUM,
         phase4_target_reentry=PHASE4_TARGET_REENTRY,
+        stoploss_amount=STOPLOSS_AMOUNT,
     )

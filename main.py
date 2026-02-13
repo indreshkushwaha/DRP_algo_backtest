@@ -231,6 +231,7 @@ def run_weekly_backtest_phase2(
     phase3_target_reentry: float = 55.0,
     phase4_trigger_premium: float | None = None,
     phase4_target_reentry: float = 60.0,
+    stoploss_amount: float | None = None,
 ):
     """
     Stateful backtest with phase-based re-entry:
@@ -271,12 +272,10 @@ def run_weekly_backtest_phase2(
     pe_short_filled = filled_series(pe_short_candles)
     pe_hedge_filled = filled_series(pe_hedge_candles)
 
-    # Phase config: list of (trigger, target) for phases 2, 3, 4 (only run re-entry when transitioning to next phase)
+    # Phase config: list of (trigger, target) for phases 2 and 3 only (Phase 4 is square-off, no re-entry)
     phase_config = [(trigger_premium, target_reentry_premium)]
     if phase3_trigger_premium is not None:
         phase_config.append((phase3_trigger_premium, phase3_target_reentry))
-    if phase4_trigger_premium is not None:
-        phase_config.append((phase4_trigger_premium, phase4_target_reentry))
 
     # State
     ce_short_strike = initial_ce_short_strike
@@ -288,6 +287,8 @@ def run_weekly_backtest_phase2(
     cumulative_realized = 0.0
     put_pair_phase = 1   # 1 = initial; advance when short CE exceeds next phase trigger
     call_pair_phase = 1  # 1 = initial; advance when short PE exceeds next phase trigger
+    call_pair_squared_off = False  # Phase 4: when True, call pair is closed and PnL zeroed
+    put_pair_squared_off = False  # Phase 4: when True, put pair is closed and PnL zeroed
 
     rows = []
     reentry_ce = 0
@@ -380,6 +381,42 @@ def run_weekly_backtest_phase2(
         lot_pe_short = pe_short_lots.get(pe_short_strike, 0)
         lot_pe_hedge = pe_hedge_lots.get(pe_short_strike, 0)
 
+        # ---- Phase 4: square off call pair when call premium > trigger (no re-entry) ----
+        if (
+            phase4_trigger_premium is not None
+            and not call_pair_squared_off
+            and close_ce_short is not None
+            and float(close_ce_short) > phase4_trigger_premium
+        ):
+            c_ce = float(close_ce_short)
+            c_ce_h = float(close_ce_hedge) if close_ce_hedge is not None else (entry_ce_hedge or 0.0)
+            e_ce = entry_ce_short if entry_ce_short is not None else 0.0
+            e_ce_h = entry_ce_hedge if entry_ce_hedge is not None else 0.0
+            round_pnl = (e_ce - c_ce) * lot_ce_short + (c_ce_h - e_ce_h) * lot_ce_hedge
+            cumulative_realized += round_pnl
+            call_pair_squared_off = True
+            print(f"[Phase4] {ts} | Square off CALL pair: short_ce_close={c_ce:.2f} (entry={e_ce:.2f}), "
+                  f"hedge_ce_close={c_ce_h:.2f} (entry={e_ce_h:.2f}), "
+                  f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
+
+        # ---- Phase 4: square off put pair when put premium > trigger (no re-entry) ----
+        if (
+            phase4_trigger_premium is not None
+            and not put_pair_squared_off
+            and close_pe_short is not None
+            and float(close_pe_short) > phase4_trigger_premium
+        ):
+            c_pe = float(close_pe_short)
+            c_pe_h = float(close_pe_hedge) if close_pe_hedge is not None else (entry_pe_hedge or 0.0)
+            e_pe = entry_pe_short if entry_pe_short is not None else 0.0
+            e_pe_h = entry_pe_hedge if entry_pe_hedge is not None else 0.0
+            round_pnl = (e_pe - c_pe) * lot_pe_short + (c_pe_h - e_pe_h) * lot_pe_hedge
+            cumulative_realized += round_pnl
+            put_pair_squared_off = True
+            print(f"[Phase4] {ts} | Square off PUT pair: short_pe_close={c_pe:.2f} (entry={e_pe:.2f}), "
+                  f"hedge_pe_close={c_pe_h:.2f} (entry={e_pe_h:.2f}), "
+                  f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
+
         # ---- Phase-based: short CE exceeds next phase trigger -> cover put pair, re-enter put once ----
         if (
             close_ce_short is not None
@@ -464,6 +501,31 @@ def run_weekly_backtest_phase2(
             else:
                 print(f"{phase_label}   WARNING: No CE strike found for re-entry at {ts}")
 
+        # ---- Stoploss: if total PnL loss exceeds stoploss_amount, square off all positions ----
+        _c_ce = float(close_ce_short) if close_ce_short is not None else (entry_ce_short or 0.0)
+        _c_ce_h = float(close_ce_hedge) if close_ce_hedge is not None else (entry_ce_hedge or 0.0)
+        _c_pe = float(close_pe_short) if close_pe_short is not None else (entry_pe_short or 0.0)
+        _c_pe_h = float(close_pe_hedge) if close_pe_hedge is not None else (entry_pe_hedge or 0.0)
+        _e_ce = entry_ce_short if entry_ce_short is not None else 0.0
+        _e_ce_h = entry_ce_hedge if entry_ce_hedge is not None else 0.0
+        _e_pe = entry_pe_short if entry_pe_short is not None else 0.0
+        _e_pe_h = entry_pe_hedge if entry_pe_hedge is not None else 0.0
+        _pnl_ce = ((_e_ce - _c_ce) * lot_ce_short + (_c_ce_h - _e_ce_h) * lot_ce_hedge) if not call_pair_squared_off else 0.0
+        _pnl_pe = ((_e_pe - _c_pe) * lot_pe_short + (_c_pe_h - _e_pe_h) * lot_pe_hedge) if not put_pair_squared_off else 0.0
+        _total_pnl = cumulative_realized + _pnl_ce + _pnl_pe
+        if stoploss_amount is not None and _total_pnl <= -stoploss_amount:
+            if not call_pair_squared_off:
+                round_pnl_ce = (_e_ce - _c_ce) * lot_ce_short + (_c_ce_h - _e_ce_h) * lot_ce_hedge
+                cumulative_realized += round_pnl_ce
+                call_pair_squared_off = True
+                print(f"[Stoploss] {ts} | Square off CALL pair: total_pnl={_total_pnl:.2f} <= -{stoploss_amount}, "
+                      f"realized_pnl={round_pnl_ce:.2f}, cumulative={cumulative_realized:.2f}")
+            if not put_pair_squared_off:
+                round_pnl_pe = (_e_pe - _c_pe) * lot_pe_short + (_c_pe_h - _e_pe_h) * lot_pe_hedge
+                cumulative_realized += round_pnl_pe
+                put_pair_squared_off = True
+                print(f"[Stoploss] {ts} | Square off PUT pair: realized_pnl={round_pnl_pe:.2f}, cumulative={cumulative_realized:.2f}")
+
         # Current lot sizes (may have changed after re-entry)
         lot_ce_short = ce_short_lots.get(ce_short_strike, 0)
         lot_ce_hedge = ce_hedge_lots.get(ce_short_strike, 0)
@@ -479,10 +541,10 @@ def run_weekly_backtest_phase2(
         e_pe_s = entry_pe_short if entry_pe_short is not None else 0.0
         e_pe_h = entry_pe_hedge if entry_pe_hedge is not None else 0.0
 
-        pnl_ce_short = (e_ce_s - c_ce_s) * lot_ce_short
-        pnl_ce_hedge = (c_ce_h - e_ce_h) * lot_ce_hedge
-        pnl_pe_short = (e_pe_s - c_pe_s) * lot_pe_short
-        pnl_pe_hedge = (c_pe_h - e_pe_h) * lot_pe_hedge
+        pnl_ce_short = (e_ce_s - c_ce_s) * lot_ce_short if not call_pair_squared_off else 0.0
+        pnl_ce_hedge = (c_ce_h - e_ce_h) * lot_ce_hedge if not call_pair_squared_off else 0.0
+        pnl_pe_short = (e_pe_s - c_pe_s) * lot_pe_short if not put_pair_squared_off else 0.0
+        pnl_pe_hedge = (c_pe_h - e_pe_h) * lot_pe_hedge if not put_pair_squared_off else 0.0
         total_pnl = cumulative_realized + pnl_ce_short + pnl_ce_hedge + pnl_pe_short + pnl_pe_hedge
 
         rows.append({
@@ -501,6 +563,7 @@ def run_weekly_backtest_phase2(
 
     print(f"Backtest complete: reentry_ce={reentry_ce}, reentry_pe={reentry_pe}, "
           f"put_pair_phase={put_pair_phase}, call_pair_phase={call_pair_phase}, "
+          f"call_pair_squared_off={call_pair_squared_off}, put_pair_squared_off={put_pair_squared_off}, "
           f"final cumulative_realized={cumulative_realized:.2f}")
 
     result_df = pd.DataFrame(rows, index=timeline)
