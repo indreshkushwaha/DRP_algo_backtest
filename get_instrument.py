@@ -57,19 +57,18 @@ def get_expired_option_contracts(underlying_key, expiry_date):
 
 
 # ==============================
-# Fetch Data
+# Fetch Data (run only when executed as script)
 # ==============================
-contracts_df = get_expired_option_contracts(
-    underlying_key="BSE_INDEX|SENSEX",
-    expiry_date="2025-07-29"
-)
+if __name__ == "__main__":
+    contracts_df = get_expired_option_contracts(
+        underlying_key="BSE_INDEX|SENSEX",
+        expiry_date="2025-07-29"
+    )
 
-print(contracts_df)
+    print(contracts_df)
 
-# ==============================
-# Save to Excel
-# ==============================
-output_file = "sensex_expired_options_2025_07_29.xlsx"
-contracts_df.to_excel(output_file, index=False)
+    # Save to Excel
+    output_file = "sensex_expired_options_2025_07_29.xlsx"
+    contracts_df.to_excel(output_file, index=False)
 
-print(f"Data saved successfully to: {output_file}")
+    print(f"Data saved successfully to: {output_file}")

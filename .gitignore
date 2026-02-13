@@ -4,4 +4,4 @@ __pycache__/
 /venv
 /packages
 /.venv_run
-__pycache__
+__pycache__/

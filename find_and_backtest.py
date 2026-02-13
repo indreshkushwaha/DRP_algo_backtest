@@ -24,18 +24,18 @@ load_dotenv()
 # CONFIGURATION - update these values
 # -----------------------------------------------------------------------------
 ENTRY_DATETIME = "2025-07-25 14:50:00"
-TARGET_PREMIUM = 300.0
+TARGET_PREMIUM = 50.0
 EXPIRY_DATE = "2025-07-29"
 UNDERLYING_KEY = "BSE_INDEX|SENSEX"
 OPTION_TYPE = "CE"   # "CE" or "PE"
 STRIKE_GAP = 100     # e.g. 100 for SENSEX, 50 for Nifty 50
-TOLERANCE = 50.0     # accept strike if |premium - target| <= TOLERANCE
+TOLERANCE = 5.0     # accept strike if |premium - target| <= TOLERANCE
 HEDGE_DIFFERENCE = 300  # long call/put at short_strike + this (e.g. short 85000 CE, hedge 300 -> long 85300 CE); 0 to disable
 SQUARE_OFF_WHEN_SHORT_BELOW = 145.0  # when short leg close <= this, square off both legs and re-enter same pair; None to disable
 SHORT_PAIR = True  # True: short CE + hedge CE + short PE + hedge PE at same entry/target; False: single option (OPTION_TYPE)
 # Phase 2: when short CE > trigger, cover put pair and re-enter put at premium ~ target_reentry; when short PE > trigger, cover call pair and re-enter call at target_reentry
-PHASE2_TRIGGER_PREMIUM = 400.0  # trigger when short leg close > this; None to disable Phase 2
-PHASE2_TARGET_REENTRY = 300.0   # target premium when re-entering the other pair
+PHASE2_TRIGGER_PREMIUM = 78.0  # trigger when short leg close > this; None to disable Phase 2
+PHASE2_TARGET_REENTRY = 50.0   # target premium when re-entering the other pair
 PHASE2_STRIKE_RANGE = 15       # ATM ± this many strike_gap steps for multi-strike pre-fetch
 OUTPUT_EXCEL = "backtest_results_fixed.xlsx"
 
@@ -89,53 +89,6 @@ def get_underlying_ltp_at_entry(underlying_key: str, entry_dt: datetime, token: 
     ltp = float(df.iloc[0]["close"])
     print(f"Underlying LTP at entry ({entry_dt}): {ltp}")
     return ltp
-
-
-def _fetch_underlying_ltp_series(
-    underlying_key: str,
-    entry_dt: pd.Timestamp,
-    expiry_dt: pd.Timestamp,
-    token: str,
-    interval: str = "1minute",
-) -> pd.Series:
-    """
-    Fetch underlying candles from entry_dt to expiry_dt and return a Series (timestamp index, close).
-    """
-    from datetime import timedelta
-
-    encoded_key = urllib.parse.quote(underlying_key, safe="")
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
-    all_dfs = []
-    current = entry_dt.date()
-    end_date = expiry_dt.date()
-    while current <= end_date:
-        date_str = current.strftime("%Y-%m-%d")
-        url = f"{BASE_URL}/historical-candle/{encoded_key}/{interval}/{date_str}/{date_str}"
-        resp = requests.get(url, headers=headers, timeout=30)
-        if resp.status_code != 200:
-            current += timedelta(days=1)
-            continue
-        data = resp.json()
-        candles = data.get("data", {}).get("candles", [])
-        if not candles:
-            current += timedelta(days=1)
-            continue
-        df = pd.DataFrame(candles)
-        df["timestamp"] = pd.to_datetime(df[0])
-        df["close"] = pd.to_numeric(df[4], errors="coerce")
-        if df["timestamp"].dt.tz is not None:
-            df["timestamp"] = df["timestamp"].dt.tz_localize(None)
-        all_dfs.append(df[["timestamp", "close"]])
-        current += timedelta(days=1)
-    if not all_dfs:
-        return pd.Series(dtype=float)
-    combined = pd.concat(all_dfs, ignore_index=True).drop_duplicates(subset=["timestamp"]).sort_values("timestamp")
-    combined = combined.set_index("timestamp")["close"]
-    combined = combined[(combined.index >= entry_dt) & (combined.index <= expiry_dt)]
-    return combined
 
 
 def get_option_premium_at_entry(instrument_key: str, entry_dt: datetime, token: str) -> float | None:
@@ -233,10 +186,11 @@ def _resolve_hedge_contract(
     option_type: str,
     short_strike: float,
     hedge_difference: int,
-) -> tuple[str, int] | None:
+) -> tuple[str, int, float] | None:
     """
-    Return (hedge_instrument_key, hedge_lot_size).
-    CE: hedge at short_strike + hedge_difference. PE (bull put spread): hedge at short_strike - hedge_difference.
+    Return (hedge_instrument_key, hedge_lot_size, hedge_strike).
+    CE hedge (bear call spread): short_strike + hedge_difference
+    PE hedge (bull put spread):  short_strike - hedge_difference
     Returns None if hedge strike not found.
     """
     from get_instrument import get_expired_option_contracts
@@ -251,7 +205,49 @@ def _resolve_hedge_contract(
     if match.empty:
         return None
     row = match.iloc[0]
-    return (row["instrument_key"], int(row["lot_size"]))
+    return (row["instrument_key"], int(row["lot_size"]), float(hedge_strike))
+
+
+def _fetch_underlying_ltp_series(
+    underlying_key: str,
+    entry_dt: pd.Timestamp,
+    expiry_dt: pd.Timestamp,
+    token: str,
+) -> pd.Series:
+    """
+    Fetch underlying 1-minute candles from entry to expiry.
+    Returns a Series (timestamp index -> close) so Phase 2 can look up LTP at any bar.
+    """
+    encoded_key = urllib.parse.quote(underlying_key, safe="")
+    from_str = entry_dt.strftime("%Y-%m-%d")
+    to_str = expiry_dt.strftime("%Y-%m-%d")
+    url = f"{BASE_URL}/historical-candle/{encoded_key}/1minute/{to_str}/{from_str}"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    resp = requests.get(url, headers=headers, timeout=30)
+    if resp.status_code != 200:
+        print(f"ERROR: Underlying LTP series API {resp.status_code}: {resp.text[:200]}")
+        return pd.Series(dtype=float)
+    data = resp.json()
+    candles = data.get("data", {}).get("candles", [])
+    if not candles:
+        print(f"ERROR: No underlying candle data from {from_str} to {to_str}")
+        return pd.Series(dtype=float)
+
+    df = pd.DataFrame(candles)
+    df["timestamp"] = pd.to_datetime(df[0])
+    df["close"] = pd.to_numeric(df[4], errors="coerce")
+    if df["timestamp"].dt.tz is not None:
+        df["timestamp"] = df["timestamp"].dt.tz_localize(None)
+    df = df.sort_values("timestamp")
+    df = df[(df["timestamp"] >= entry_dt) & (df["timestamp"] <= expiry_dt)]
+    ser = df.set_index("timestamp")["close"]
+    ser = ser[~ser.index.duplicated(keep="first")]
+    print(f"Underlying LTP series: {len(ser)} bars from {ser.index.min()} to {ser.index.max()}")
+    return ser
 
 
 def _fetch_multi_strike_candles(
@@ -279,12 +275,11 @@ def _fetch_multi_strike_candles(
     atm = round(get_underlying_ltp_at_entry(underlying_key, entry_dt, token) / strike_gap) * strike_gap
     lo = atm - strike_range * strike_gap
     hi = atm + strike_range * strike_gap
+    # PE hedge = short_strike - hedge_difference (bull put spread); CE hedge = short_strike + hedge_difference (bear call spread)
     if option_type.upper() == "PE":
         short_strikes = [s for s in all_strikes if lo <= s <= hi and (s - hedge_difference) in all_strikes]
-        hedge_strike_offset = -hedge_difference
     else:
         short_strikes = [s for s in all_strikes if lo <= s <= hi and (s + hedge_difference) in all_strikes]
-        hedge_strike_offset = hedge_difference
 
     short_candles: dict[float, pd.DataFrame] = {}
     hedge_candles: dict[float, pd.DataFrame] = {}
@@ -293,7 +288,7 @@ def _fetch_multi_strike_candles(
 
     for strike in short_strikes:
         row_short = filtered[filtered["strike_price"] == strike].iloc[0]
-        hedge_strike = strike + hedge_strike_offset
+        hedge_strike = strike - hedge_difference if option_type.upper() == "PE" else strike + hedge_difference
         row_hedge = filtered[filtered["strike_price"] == hedge_strike].iloc[0]
         short_key = row_short["instrument_key"]
         hedge_key = row_hedge["instrument_key"]
@@ -385,8 +380,8 @@ def run(
             if ce_hedge is None:
                 print(f"ERROR: CE hedge strike {strike_ce + hedge_difference} not found. Aborting.")
                 sys.exit(1)
-            hedge_ce_key, hedge_ce_lot = ce_hedge
-            print(f"Hedge CE (long): {hedge_ce_key} (strike={strike_ce + hedge_difference}, lot_size={hedge_ce_lot})")
+            hedge_ce_key, hedge_ce_lot, hedge_ce_strike = ce_hedge
+            print(f"Hedge CE (long): {hedge_ce_key} (strike={hedge_ce_strike}, lot_size={hedge_ce_lot})")
             instruments.append({"instrument_key": hedge_ce_key, "side": "BUY", "lot_size": hedge_ce_lot})
 
         print("Pair mode: finding PE to short...")
@@ -417,8 +412,8 @@ def run(
             if pe_hedge is None:
                 print(f"ERROR: PE hedge strike {strike_pe - hedge_difference} not found. Aborting.")
                 sys.exit(1)
-            hedge_pe_key, hedge_pe_lot = pe_hedge
-            print(f"Hedge PE (long): {hedge_pe_key} (strike={strike_pe - hedge_difference}, lot_size={hedge_pe_lot})")
+            hedge_pe_key, hedge_pe_lot, hedge_pe_strike = pe_hedge
+            print(f"Hedge PE (long): {hedge_pe_key} (strike={hedge_pe_strike}, lot_size={hedge_pe_lot})")
             instruments.append({"instrument_key": hedge_pe_key, "side": "BUY", "lot_size": hedge_pe_lot})
 
         expiry_datetime = f"{expiry_date} 15:30:00"
@@ -426,6 +421,13 @@ def run(
             # Phase 2: pre-fetch multi-strike candles and run stateful backtest with re-entry
             entry_dt = pd.to_datetime(entry_datetime)
             expiry_dt = pd.to_datetime(expiry_datetime)
+            print("Phase 2: fetching underlying LTP series...")
+            underlying_ltp_series = _fetch_underlying_ltp_series(
+                underlying_key=underlying_key,
+                entry_dt=entry_dt,
+                expiry_dt=expiry_dt,
+                token=token,
+            )
             print("Phase 2: fetching multi-strike candles for CE...")
             ce_short_candles, ce_hedge_candles, ce_short_lots, ce_hedge_lots = _fetch_multi_strike_candles(
                 underlying_key=underlying_key,
@@ -461,14 +463,6 @@ def run(
                     square_off_short_below=None,
                 )
             else:
-                print("Phase 2: fetching underlying LTP series...")
-                underlying_ltp_series = _fetch_underlying_ltp_series(
-                    underlying_key=underlying_key,
-                    entry_dt=entry_dt,
-                    expiry_dt=expiry_dt,
-                    token=token,
-                    interval="1minute",
-                )
                 result_df = main.run_weekly_backtest_phase2(
                     entry_datetime=entry_datetime,
                     expiry_datetime=expiry_datetime,
@@ -526,12 +520,12 @@ def run(
                 short_strike=strike,
                 hedge_difference=hedge_difference,
             )
-            expected_hedge_strike = strike - hedge_difference if option_type.upper() == "PE" else strike + hedge_difference
             if hedge_result is None:
-                print(f"ERROR: Hedge strike {expected_hedge_strike} not found for expiry {expiry_date}. Aborting.")
+                h_strike = strike - hedge_difference if option_type.upper() == "PE" else strike + hedge_difference
+                print(f"ERROR: Hedge strike {h_strike} not found for expiry {expiry_date}. Aborting.")
                 sys.exit(1)
-            hedge_instrument_key, hedge_lot_size = hedge_result
-            print(f"Hedge (long): {hedge_instrument_key} (strike={expected_hedge_strike}, lot_size={hedge_lot_size})")
+            hedge_instrument_key, hedge_lot_size, hedge_strike_val = hedge_result
+            print(f"Hedge (long): {hedge_instrument_key} (strike={hedge_strike_val}, lot_size={hedge_lot_size})")
             instruments.append(
                 {"instrument_key": hedge_instrument_key, "side": "BUY", "lot_size": hedge_lot_size},
             )
