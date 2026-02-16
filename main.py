@@ -5,6 +5,8 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
+import upstox_api
+
 load_dotenv()
 
 BASE_URL = "https://api.upstox.com/v2"
@@ -33,7 +35,7 @@ def fetch_candle_data(instrument_key, from_date, to_date, interval="1minute"):
         "Accept": "application/json"
     }
 
-    response = requests.get(url, headers=headers)
+    response = upstox_api.get(url, headers=headers, timeout=30)
     data = response.json()
 
     if "data" not in data or "candles" not in data["data"]:
@@ -578,10 +580,11 @@ if __name__ == "__main__":
         {"instrument_key": "BSE_FO|1140462|29-07-2025", "side": "SELL", "lot_size": 20},
     ]
 
-    result_df = run_weekly_backtest_phase2(
+    result_df = run_weekly_backtest(
         instruments=instruments,
-        entry_datetime="2025-07-25 09:20:00",
-        expiry_datetime="2025-07-29 15:30:00"
+        entry_datetime="2025-05-25 09:20:00",
+        expiry_datetime="2025-06-15 15:30:00",
+        square_off_short_below=-10000,
     )
 
     result_df.to_excel("backtest_results_fixed.xlsx")

@@ -18,6 +18,8 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 
+import upstox_api
+
 load_dotenv()
 
 # -----------------------------------------------------------------------------
@@ -73,7 +75,7 @@ def get_underlying_ltp_at_entry(underlying_key: str, entry_dt: datetime, token: 
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
-    resp = requests.get(url, headers=headers, timeout=30)
+    resp = upstox_api.get(url, headers=headers, timeout=30)
     if resp.status_code != 200:
         print(f"ERROR: Underlying candle API {resp.status_code}: {resp.text[:200]}")
         return 0.0
@@ -235,7 +237,7 @@ def _fetch_underlying_ltp_series(
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
-    resp = requests.get(url, headers=headers, timeout=30)
+    resp = upstox_api.get(url, headers=headers, timeout=30)
     if resp.status_code != 200:
         print(f"ERROR: Underlying LTP series API {resp.status_code}: {resp.text[:200]}")
         return pd.Series(dtype=float)
@@ -350,12 +352,13 @@ def run(
     phase4_trigger_premium: float | None = None,
     phase4_target_reentry: float = 60.0,
     stoploss_amount: float | None = None,
-) -> None:
+) -> "pd.DataFrame | None":
     """
     Find instrument(s) to short and run backtest; save result to Excel.
     If short_pair is False: single option (option_type CE or PE), optional hedge, optional square_off.
     If short_pair is True: short CE + hedge CE + short PE + hedge PE at same entry/target; no square-off.
     If phase2_trigger_premium is not None (and short_pair and 4 legs): Phase 2 re-entry when short CE/PE > trigger.
+    Returns the result DataFrame on success, or None on failure / no data.
     """
     import main
 
@@ -377,7 +380,7 @@ def run(
         )
         if ce_result is None:
             print("Aborting: could not find CE to short.")
-            return
+            return None
         ce_key, ce_lot, strike_ce, premium_ce = ce_result
         print(f"Short CE: {ce_key} (strike={strike_ce}, lot_size={ce_lot}, entry premium={premium_ce:.2f})")
 
@@ -410,7 +413,7 @@ def run(
         )
         if pe_result is None:
             print("Aborting: could not find PE to short.")
-            return
+            return None
         pe_key, pe_lot, strike_pe, premium_pe = pe_result
         print(f"Short PE: {pe_key} (strike={strike_pe}, lot_size={pe_lot}, entry premium={premium_pe:.2f})")
         instruments.append({"instrument_key": pe_key, "side": "SELL", "lot_size": pe_lot})
@@ -522,7 +525,7 @@ def run(
         )
         if result is None:
             print("Aborting: could not find instrument to short.")
-            return
+            return None
 
         instrument_key, lot_size, strike, premium = result
         print(f"Instrument to short: {instrument_key} (strike={strike}, lot_size={lot_size}, entry premium={premium:.2f})")
@@ -558,7 +561,7 @@ def run(
 
     if result_df.empty:
         print("Backtest returned no data.")
-        return
+        return None
 
     # Rename columns for clearer Excel headers
     if len(instruments) == 2 and not short_pair:
@@ -613,8 +616,11 @@ def run(
                 rename[col] = "hedge_pe_pnl"
         result_df = result_df.rename(columns=rename)
 
-    result_df.to_excel(output_excel, index=True)
-    print(f"Results saved to {output_excel}")
+    if output_excel is not None:
+        result_df.to_excel(output_excel, index=True)
+        print(f"Results saved to {output_excel}")
+
+    return result_df
 
 
 if __name__ == "__main__":

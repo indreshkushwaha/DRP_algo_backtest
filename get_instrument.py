@@ -3,6 +3,8 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 
+import upstox_api
+
 load_dotenv()
 
 BASE_URL = "https://api.upstox.com/v2"
@@ -26,7 +28,7 @@ def get_expired_option_contracts(underlying_key, expiry_date):
         "expiry_date": expiry_date
     }
 
-    response = requests.get(url, headers=headers, params=params)
+    response = upstox_api.get(url, headers=headers, params=params)
     data = response.json()
 
     if "data" not in data:

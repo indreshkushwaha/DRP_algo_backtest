@@ -5,3 +5,7 @@ __pycache__/
 /packages
 /.venv_run
 __pycache__/
+/venv_run
+venv
+.venv
+vevnv/
