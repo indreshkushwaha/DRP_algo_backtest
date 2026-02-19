@@ -53,9 +53,16 @@ BASE_URL = "https://api.upstox.com/v2"
 
 
 def _get_access_token():
-    token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+    """Read token from token_config.py first, then fall back to .env."""
+    try:
+        import token_config
+        token = (getattr(token_config, "UPSTOX_ACCESS_TOKEN", None) or "").strip()
+    except Exception:
+        token = ""
     if not token or token == "your_access_token_here":
-        print("ERROR: Set UPSTOX_ACCESS_TOKEN in .env")
+        token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+    if not token or token == "your_access_token_here":
+        print("ERROR: Set UPSTOX_ACCESS_TOKEN in .env or in token_config.py (or via frontend Settings)")
         sys.exit(1)
     return token
 
@@ -340,7 +347,7 @@ def run(
     tolerance: float = 50.0,
     hedge_difference: int | None = None,
     square_off_short_below: float | None = None,
-    output_excel: str = "backtest_results_fixed.xlsx",
+    output_excel: str | None = "backtest_results_fixed.xlsx",
     short_pair: bool = False,
     phase2_trigger_premium: float | None = None,
     phase2_target_reentry: float = 300.0,
@@ -350,9 +357,11 @@ def run(
     phase4_trigger_premium: float | None = None,
     phase4_target_reentry: float = 60.0,
     stoploss_amount: float | None = None,
-) -> None:
+) -> pd.DataFrame | None:
     """
-    Find instrument(s) to short and run backtest; save result to Excel.
+    Find instrument(s) to short and run backtest.
+    If output_excel is a path string, save result to Excel and return None.
+    If output_excel is None, return the result DataFrame (for API use).
     If short_pair is False: single option (option_type CE or PE), optional hedge, optional square_off.
     If short_pair is True: short CE + hedge CE + short PE + hedge PE at same entry/target; no square-off.
     If phase2_trigger_premium is not None (and short_pair and 4 legs): Phase 2 re-entry when short CE/PE > trigger.
@@ -377,7 +386,7 @@ def run(
         )
         if ce_result is None:
             print("Aborting: could not find CE to short.")
-            return
+            return None
         ce_key, ce_lot, strike_ce, premium_ce = ce_result
         print(f"Short CE: {ce_key} (strike={strike_ce}, lot_size={ce_lot}, entry premium={premium_ce:.2f})")
 
@@ -410,7 +419,7 @@ def run(
         )
         if pe_result is None:
             print("Aborting: could not find PE to short.")
-            return
+            return None
         pe_key, pe_lot, strike_pe, premium_pe = pe_result
         print(f"Short PE: {pe_key} (strike={strike_pe}, lot_size={pe_lot}, entry premium={premium_pe:.2f})")
         instruments.append({"instrument_key": pe_key, "side": "SELL", "lot_size": pe_lot})
@@ -522,7 +531,7 @@ def run(
         )
         if result is None:
             print("Aborting: could not find instrument to short.")
-            return
+            return None
 
         instrument_key, lot_size, strike, premium = result
         print(f"Instrument to short: {instrument_key} (strike={strike}, lot_size={lot_size}, entry premium={premium:.2f})")
@@ -558,7 +567,7 @@ def run(
 
     if result_df.empty:
         print("Backtest returned no data.")
-        return
+        return None
 
     # Rename columns for clearer Excel headers
     if len(instruments) == 2 and not short_pair:
@@ -613,8 +622,11 @@ def run(
                 rename[col] = "hedge_pe_pnl"
         result_df = result_df.rename(columns=rename)
 
-    result_df.to_excel(output_excel, index=True)
-    print(f"Results saved to {output_excel}")
+    if output_excel is not None:
+        result_df.to_excel(output_excel, index=True)
+        print(f"Results saved to {output_excel}")
+        return None
+    return result_df
 
 
 if __name__ == "__main__":

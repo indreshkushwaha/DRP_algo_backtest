@@ -2,3 +2,6 @@ requests
 python-dotenv
 tabulate
 openpyxl
+pandas
+fastapi
+uvicorn
