@@ -3,8 +3,13 @@ FastAPI backend for backtest config and results.
 Run from repo root: uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 """
 import importlib
+import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Ensure repo root is on path so we can import find_and_backtest and main
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -12,7 +17,7 @@ TOKEN_CONFIG_PATH = REPO_ROOT / "token_config.py"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -40,8 +45,10 @@ app.add_middleware(
 
 def _read_token() -> str:
     if token_config is not None and hasattr(token_config, "UPSTOX_ACCESS_TOKEN"):
-        return (token_config.UPSTOX_ACCESS_TOKEN or "").strip()
-    return ""
+        t = (token_config.UPSTOX_ACCESS_TOKEN or "").strip()
+        if t:
+            return t
+    return os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
 
 
 def _write_token(token: str) -> None:
@@ -71,9 +78,9 @@ class BacktestConfig(BaseModel):
     phase2_target_reentry: float = 50.0
     phase2_strike_range: int = 15
     phase3_trigger_premium: float | None = 98.0
-    phase3_target_reentry: float = 45.0
+    phase3_target_reentry: float = 50.0
     phase4_trigger_premium: float | None = 115.0
-    phase4_target_reentry: float = 65.0
+    phase4_target_reentry: float = 50.0
     stoploss_amount: float | None = 5000.0
 
 
@@ -119,6 +126,40 @@ def _compute_summary(result_df):
         "start_datetime": _ts_str(start_ts),
         "end_datetime": _ts_str(end_ts),
         "num_bars": int(len(result_df)),
+    }
+
+
+@app.get("/api/expiries")
+def get_expiries_list(
+    instrument_key: str = Query(..., description="Underlying key, e.g. BSE_INDEX|SENSEX"),
+    from_date: str | None = Query(None, description="Filter expiries on or after (YYYY-MM-DD)"),
+    to_date: str | None = Query(None, description="Filter expiries on or before (YYYY-MM-DD)"),
+):
+    """Return expiry dates for the underlying. API returns only past expiries (~6 months)."""
+    from get_instrument import get_expiries as fetch_expiries
+    token = _read_token()
+    if not token:
+        return {"expiries": [], "error": "No access token"}
+    all_expiries, err = fetch_expiries(instrument_key, token)
+    if err:
+        return {"expiries": [], "error": err}
+    if not all_expiries:
+        return {"expiries": [], "error": "No expiries returned for this instrument"}
+    if from_date is None and to_date is None:
+        return {"expiries": sorted(all_expiries)}
+    filtered = []
+    for d in all_expiries:
+        if from_date and d < from_date:
+            continue
+        if to_date and d > to_date:
+            continue
+        filtered.append(d)
+    if filtered:
+        return {"expiries": sorted(filtered)}
+    return {
+        "expiries": sorted(all_expiries),
+        "range_matched": False,
+        "message": "No expiries in selected range. API returns only past expiries. Showing all available.",
     }
 
 

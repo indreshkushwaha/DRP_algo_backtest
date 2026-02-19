@@ -3,8 +3,37 @@ import './App.css'
 
 const API_BASE = 'http://localhost:8000'
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function computeEntryDatetime(expiryDate, entryDay, entryTime) {
+  const [y, m, d] = expiryDate.split('-').map(Number)
+  const expiry = new Date(y, m - 1, d)
+  const weekday = (expiry.getDay() + 6) % 7
+  const monday = new Date(expiry)
+  monday.setDate(expiry.getDate() - weekday)
+  const entryDate = new Date(monday)
+  entryDate.setDate(monday.getDate() + entryDay)
+  const Y = entryDate.getFullYear()
+  const M = String(entryDate.getMonth() + 1).padStart(2, '0')
+  const D = String(entryDate.getDate()).padStart(2, '0')
+  const timePart = entryTime.includes(':') ? entryTime : `${entryTime}:00`
+  const [hh, mm] = timePart.split(':')
+  return `${Y}-${M}-${D} ${hh}:${mm || '00'}:00`
+}
+
+function defaultExpiryFromDate() {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 6)
+  return d.toISOString().slice(0, 10)
+}
+
+function defaultExpiryToDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 const defaultConfig = {
-  entry_datetime: '2025-07-25 14:50:00',
+  entry_day: 0,
+  entry_time: '13:15',
   target_premium: 50,
   expiry_date: '2025-07-29',
   underlying_key: 'BSE_INDEX|SENSEX',
@@ -18,9 +47,9 @@ const defaultConfig = {
   phase2_target_reentry: 50,
   phase2_strike_range: 15,
   phase3_trigger_premium: 98,
-  phase3_target_reentry: 45,
+  phase3_target_reentry: 50,
   phase4_trigger_premium: 115,
-  phase4_target_reentry: 65,
+  phase4_target_reentry: 50,
   stoploss_amount: 5000,
 }
 
@@ -34,6 +63,12 @@ function App() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [backtestLoading, setBacktestLoading] = useState(false)
+  const [expiryFromDate, setExpiryFromDate] = useState(defaultExpiryFromDate)
+  const [expiryToDate, setExpiryToDate] = useState(defaultExpiryToDate)
+  const [expiries, setExpiries] = useState([])
+  const [expiriesLoading, setExpiriesLoading] = useState(false)
+  const [expiriesError, setExpiriesError] = useState('')
+  const [expiriesMessage, setExpiriesMessage] = useState('')
 
   useEffect(() => {
     fetch(`${API_BASE}/api/config/defaults`)
@@ -45,6 +80,48 @@ function App() {
       .then((d) => setToken(d.access_token || ''))
       .catch(() => {})
   }, [])
+
+  const fetchExpiries = () => {
+    const key = config.underlying_key
+    if (!key || !expiryFromDate || !expiryToDate) {
+      setExpiries([])
+      setExpiriesError('')
+      setExpiriesMessage('')
+      return
+    }
+    setExpiriesLoading(true)
+    setExpiriesError('')
+    setExpiriesMessage('')
+    const params = new URLSearchParams({
+      instrument_key: key,
+      from_date: expiryFromDate,
+      to_date: expiryToDate,
+    })
+    fetch(`${API_BASE}/api/expiries?${params}`)
+      .then((r) => r.json())
+      .then((res) => {
+        const list = res.expiries || []
+        setExpiries(list)
+        setExpiriesError(res.error || '')
+        setExpiriesMessage(res.range_matched === false ? (res.message || '') : '')
+        setConfig((c) => {
+          if (list.length && (!c.expiry_date || !list.includes(c.expiry_date))) {
+            return { ...c, expiry_date: list[0] }
+          }
+          return c
+        })
+      })
+      .catch((e) => {
+        setExpiries([])
+        setExpiriesError(e.message || 'Failed to fetch expiries')
+        setExpiriesMessage('')
+      })
+      .finally(() => setExpiriesLoading(false))
+  }
+
+  useEffect(() => {
+    fetchExpiries()
+  }, [config.underlying_key, expiryFromDate, expiryToDate])
 
   const saveToken = () => {
     setError('')
@@ -71,6 +148,11 @@ function App() {
     setBacktestLoading(true)
     const body = {
       ...config,
+      entry_datetime: computeEntryDatetime(
+        config.expiry_date,
+        config.entry_day ?? 0,
+        config.entry_time ?? '13:15',
+      ),
       hedge_difference: config.hedge_difference === '' ? null : Number(config.hedge_difference),
       square_off_when_short_below: config.square_off_when_short_below === '' ? null : Number(config.square_off_when_short_below),
       phase2_trigger_premium: config.phase2_trigger_premium === '' ? null : Number(config.phase2_trigger_premium),
@@ -128,31 +210,64 @@ function App() {
       <section className="card">
         <h2>Backtest config</h2>
         <div className="form-grid">
-          <label>Entry datetime <input value={config.entry_datetime} onChange={(e) => updateConfig('entry_datetime', e.target.value)} /></label>
-          <label>Target premium <input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
-          <label>Expiry date <input value={config.expiry_date} onChange={(e) => updateConfig('expiry_date', e.target.value)} /></label>
-          <label>Underlying key <input value={config.underlying_key} onChange={(e) => updateConfig('underlying_key', e.target.value)} /></label>
-          <label>Option type
-            <select value={config.option_type} onChange={(e) => updateConfig('option_type', e.target.value)}>
-              <option value="CE">CE</option>
-              <option value="PE">PE</option>
+          <label>Entry day
+            <select value={config.entry_day ?? 0} onChange={(e) => updateConfig('entry_day', Number(e.target.value))}>
+              {DAYS.map((day, i) => (
+                <option key={day} value={i}>{day}</option>
+              ))}
             </select>
           </label>
-          <label>Strike gap <input type="number" value={config.strike_gap} onChange={(e) => updateConfig('strike_gap', e.target.value)} /></label>
+          <label>Entry time <input type="time" value={config.entry_time ?? '13:15'} onChange={(e) => updateConfig('entry_time', e.target.value)} /></label>
+          <label>Target premium <input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
+          <label>From date
+            <input type="date" value={expiryFromDate} onChange={(e) => setExpiryFromDate(e.target.value)} />
+          </label>
+          <label>To date
+            <input type="date" value={expiryToDate} onChange={(e) => setExpiryToDate(e.target.value)} />
+          </label>
+          <label>Expiry date
+            <select
+              value={expiries.length && expiries.includes(config.expiry_date) ? config.expiry_date : ''}
+              onChange={(e) => updateConfig('expiry_date', e.target.value)}
+              disabled={expiriesLoading || !expiries.length}
+            >
+              {!expiries.length && <option value="">{expiriesLoading ? 'Loading…' : 'No expiries in range'}</option>}
+              {expiries.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <button type="button" onClick={fetchExpiries} disabled={expiriesLoading || !config.underlying_key || !expiryFromDate || !expiryToDate}>
+              {expiriesLoading ? 'Fetching…' : 'Fetch / update expiries'}
+            </button>
+          </label>
+          {(expiriesError || expiriesMessage) && (
+            <div className="expiries-note" style={{ gridColumn: '1 / -1', fontSize: '0.9rem', marginTop: -4 }}>
+              {expiriesError && <div className="expiries-error" style={{ color: 'var(--error-color, #ff6b6b)' }}>{expiriesError}</div>}
+              {expiriesMessage && <div className="expiries-message" style={{ color: 'var(--message-color, #888)' }}>{expiriesMessage}</div>}
+            </div>
+          )}
+          <label>Underlying key
+            <input readOnly value={config.underlying_key} />
+          </label>
           <label>Tolerance <input type="number" step="0.1" value={config.tolerance} onChange={(e) => updateConfig('tolerance', e.target.value)} /></label>
           <label>Hedge difference <input type="number" value={config.hedge_difference ?? ''} onChange={(e) => updateConfig('hedge_difference', e.target.value)} placeholder="or empty" /></label>
           <label>Square off when short below <input type="number" step="0.1" value={config.square_off_when_short_below ?? ''} onChange={(e) => updateConfig('square_off_when_short_below', e.target.value)} placeholder="or empty" /></label>
-          <label><input type="checkbox" checked={config.short_pair} onChange={(e) => updateConfig('short_pair', e.target.checked)} /> Short pair (CE+PE)</label>
           <label>Phase2 trigger premium <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Phase2 target reentry <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} /></label>
           <label>Phase2 strike range <input type="number" value={config.phase2_strike_range} onChange={(e) => updateConfig('phase2_strike_range', e.target.value)} /></label>
           <label>Phase3 trigger premium <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Phase3 target reentry <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} /></label>
           <label>Phase4 trigger premium <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Phase4 target reentry <input type="number" step="0.1" value={config.phase4_target_reentry} onChange={(e) => updateConfig('phase4_target_reentry', e.target.value)} /></label>
           <label>Stoploss amount <input type="number" value={config.stoploss_amount ?? ''} onChange={(e) => updateConfig('stoploss_amount', e.target.value)} placeholder="or empty" /></label>
         </div>
-        <button onClick={runBacktest} disabled={backtestLoading} className="primary" style={{ marginTop: 12 }}>
+        <button
+          onClick={runBacktest}
+          disabled={backtestLoading || expiriesLoading || !expiries.length || !expiries.includes(config.expiry_date)}
+          className="primary"
+          style={{ marginTop: 12 }}
+        >
           {backtestLoading ? 'Running backtest…' : 'Run backtest'}
         </button>
       </section>

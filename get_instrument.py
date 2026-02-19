@@ -9,6 +9,35 @@ BASE_URL = "https://api.upstox.com/v2"
 ACCESS_TOKEN = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
 
 
+def get_expiries(underlying_key: str, access_token: str | None = None) -> tuple[list[str], str | None]:
+    """
+    Fetch all expiry dates for an underlying from Upstox expired-instruments API.
+    Returns (list of YYYY-MM-DD strings, error_message or None).
+    Uses access_token if provided, else env. API returns only past/historical expiries (up to ~6 months).
+    """
+    token = (access_token or ACCESS_TOKEN).strip()
+    if not token:
+        return [], "No access token"
+    url = f"{BASE_URL}/expired-instruments/expiries"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    params = {"instrument_key": underlying_key}
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        data = response.json()
+    except Exception as e:
+        return [], str(e)
+    if response.status_code != 200:
+        err = data.get("error") or data.get("message") or response.text or f"HTTP {response.status_code}"
+        return [], err
+    if data.get("status") != "success" or "data" not in data:
+        return [], data.get("error") or data.get("message") or "Invalid response"
+    raw = data["data"]
+    return (list(raw) if isinstance(raw, list) else []), None
+
+
 def get_expired_option_contracts(underlying_key, expiry_date):
     """
     Fetch all expired option contracts for a given underlying and expiry date.

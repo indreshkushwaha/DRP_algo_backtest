@@ -52,10 +52,18 @@
   border: 1px solid #555;
 }
 
+.form-grid input[readonly] {
+  cursor: not-allowed;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
 @media (prefers-color-scheme: light) {
   .form-grid input,
   .form-grid select {
     border-color: #ccc;
+  }
+  .form-grid input[readonly] {
+    background-color: #eee;
   }
 }
 
