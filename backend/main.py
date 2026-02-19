@@ -5,6 +5,7 @@ Run from repo root: uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 import importlib
 import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,6 +15,8 @@ load_dotenv()
 # Ensure repo root is on path so we can import find_and_backtest and main
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TOKEN_CONFIG_PATH = REPO_ROOT / "token_config.py"
+ENV_PATH = REPO_ROOT / ".env"
+RELOAD_TRIGGER_PATH = REPO_ROOT / "backend" / "reload_trigger.py"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -51,12 +54,43 @@ def _read_token() -> str:
     return os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
 
 
+def _update_env_token(token: str) -> None:
+    """Update or add UPSTOX_ACCESS_TOKEN in .env so other scripts and restarted app use it."""
+    token_value = token.strip().split("\n")[0]  # single line only
+    line = f"UPSTOX_ACCESS_TOKEN={token_value}\n"
+    if ENV_PATH.exists():
+        lines = ENV_PATH.read_text(encoding="utf-8").splitlines(keepends=True)
+        found = False
+        new_lines = []
+        for ln in lines:
+            if ln.strip().startswith("UPSTOX_ACCESS_TOKEN="):
+                new_lines.append(line)
+                found = True
+            else:
+                new_lines.append(ln)
+        if not found:
+            new_lines.append(line)
+        ENV_PATH.write_text("".join(new_lines), encoding="utf-8")
+    else:
+        ENV_PATH.write_text(line, encoding="utf-8")
+
+
+def _trigger_reload() -> None:
+    """Touch reload_trigger.py so uvicorn --reload restarts the app."""
+    RELOAD_TRIGGER_PATH.write_text(
+        f"# Auto-updated when token is saved from frontend to trigger uvicorn --reload (do not edit)\nRELOAD_TS = {int(time.time())}\n",
+        encoding="utf-8",
+    )
+
+
 def _write_token(token: str) -> None:
     escaped = repr(token)
     content = f"# Upstox access token - can be updated from the frontend via API.\n# Do not commit this file with a real token (see .gitignore).\nUPSTOX_ACCESS_TOKEN = {escaped}\n"
     TOKEN_CONFIG_PATH.write_text(content, encoding="utf-8")
+    _update_env_token(token)
     if token_config is not None:
         importlib.reload(token_config)
+    _trigger_reload()
 
 
 class TokenUpdate(BaseModel):
