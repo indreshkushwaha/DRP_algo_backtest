@@ -102,10 +102,10 @@ def _compute_summary(result_df):
     if "total_pnl" not in result_df.columns or result_df.empty:
         return {}
     pnl = result_df["total_pnl"]
-    running_max = pnl.cummax()
-    drawdown = running_max - pnl
-    max_dd = drawdown.max()
-    max_dd_idx = drawdown.idxmax()
+    # Max drawdown = when PnL is minimum (worst point)
+    min_pnl = pnl.min()
+    min_pnl_idx = pnl.idxmin()
+    # Max profit = when PnL is maximum (best point)
     max_profit = pnl.max()
     max_profit_idx = pnl.idxmax()
     index = result_df.index
@@ -118,8 +118,8 @@ def _compute_summary(result_df):
         return str(ts)
 
     return {
-        "max_drawdown_amount": round(float(max_dd), 2),
-        "max_drawdown_datetime": _ts_str(max_dd_idx),
+        "max_drawdown_amount": round(float(min_pnl), 2),
+        "max_drawdown_datetime": _ts_str(min_pnl_idx),
         "max_profit_amount": round(float(max_profit), 2),
         "max_profit_datetime": _ts_str(max_profit_idx),
         "final_pnl": round(float(pnl.iloc[-1]), 2),

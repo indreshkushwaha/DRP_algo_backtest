@@ -21,6 +21,15 @@ function computeEntryDatetime(expiryDate, entryDay, entryTime) {
   return `${Y}-${M}-${D} ${hh}:${mm || '00'}:00`
 }
 
+function formatDateTime(str) {
+  if (str == null || str === '') return ''
+  const s = String(str).trim()
+  if (!s) return ''
+  const withoutT = s.replace('T', ' ')
+  const dot = withoutT.indexOf('.')
+  return dot >= 0 ? withoutT.slice(0, dot) : withoutT
+}
+
 function defaultExpiryFromDate() {
   const d = new Date()
   d.setMonth(d.getMonth() - 6)
@@ -53,6 +62,19 @@ const defaultConfig = {
   stoploss_amount: 5000,
 }
 
+const STORAGE_KEY = 'upstox_backtest_saved_runs'
+
+function loadSavedRuns() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function App() {
   const [token, setToken] = useState('')
   const [tokenSaved, setTokenSaved] = useState(false)
@@ -69,6 +91,12 @@ function App() {
   const [expiriesLoading, setExpiriesLoading] = useState(false)
   const [expiriesError, setExpiriesError] = useState('')
   const [expiriesMessage, setExpiriesMessage] = useState('')
+  const [savedRuns, setSavedRuns] = useState([])
+  const [selectedExpiriesForCombine, setSelectedExpiriesForCombine] = useState([])
+
+  useEffect(() => {
+    setSavedRuns(loadSavedRuns())
+  }, [])
 
   useEffect(() => {
     fetch(`${API_BASE}/api/config/defaults`)
@@ -185,6 +213,73 @@ function App() {
     setConfig((c) => ({ ...c, [key]: value }))
   }
 
+  const saveRun = () => {
+    if (!summary || data.length === 0) return
+    const run = {
+      underlying_key: config.underlying_key,
+      expiry_date: config.expiry_date,
+      summary: { ...summary },
+      data: [...data],
+      columns: [...columns],
+      savedAt: new Date().toISOString(),
+    }
+    const current = loadSavedRuns()
+    const rest = current.filter(
+      (r) => !(r.underlying_key === run.underlying_key && r.expiry_date === run.expiry_date)
+    )
+    const next = [...rest, run]
+    setSavedRuns(next)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  }
+
+  const runsForUnderlying = savedRuns.filter((r) => r.underlying_key === config.underlying_key)
+  const selectedRuns = runsForUnderlying.filter((r) => selectedExpiriesForCombine.includes(r.expiry_date))
+  const combinedSummary =
+    selectedRuns.length > 0
+      ? (() => {
+          const sumFinalPnl = selectedRuns.reduce((a, r) => a + Number(r.summary.final_pnl || 0), 0)
+          const sumBars = selectedRuns.reduce((a, r) => a + Number(r.summary.num_bars || 0), 0)
+          const minDrawdownRun = selectedRuns.reduce((best, r) =>
+            Number(r.summary.max_drawdown_amount ?? 0) < Number(best.summary.max_drawdown_amount ?? 0) ? r : best
+          )
+          const maxProfitRun = selectedRuns.reduce((best, r) =>
+            Number(r.summary.max_profit_amount ?? 0) > Number(best.summary.max_profit_amount ?? 0) ? r : best
+          )
+          const starts = selectedRuns.map((r) => r.summary.start_datetime || '')
+          const ends = selectedRuns.map((r) => r.summary.end_datetime || '')
+          return {
+            final_pnl: sumFinalPnl,
+            num_bars: sumBars,
+            max_drawdown_amount: minDrawdownRun.summary.max_drawdown_amount,
+            max_drawdown_datetime: minDrawdownRun.summary.max_drawdown_datetime,
+            max_profit_amount: maxProfitRun.summary.max_profit_amount,
+            max_profit_datetime: maxProfitRun.summary.max_profit_datetime,
+            start_datetime: starts.length ? starts.reduce((a, b) => (a <= b ? a : b)) : '',
+            end_datetime: ends.length ? ends.reduce((a, b) => (a >= b ? a : b)) : '',
+          }
+        })()
+      : null
+
+  const toggleExpiryForCombine = (expiryDate) => {
+    setSelectedExpiriesForCombine((prev) =>
+      prev.includes(expiryDate) ? prev.filter((e) => e !== expiryDate) : [...prev, expiryDate]
+    )
+  }
+
+  const selectAllSavedExpiries = () => {
+    const dates = runsForUnderlying.map((r) => r.expiry_date)
+    setSelectedExpiriesForCombine((prev) =>
+      prev.length === dates.length ? [] : dates
+    )
+  }
+
+  const clearSavedData = () => {
+    if (typeof window === 'undefined' || !window.confirm('Clear all saved backtest runs? This cannot be undone.')) return
+    setSavedRuns([])
+    setSelectedExpiriesForCombine([])
+    localStorage.setItem(STORAGE_KEY, '[]')
+  }
+
   return (
     <div className="app">
       <h1>Upstox Backtest</h1>
@@ -278,23 +373,28 @@ function App() {
         <section className="card table-section">
           <h2>Results</h2>
           {summary && Object.keys(summary).length > 0 && (
-            <div className="results-summary">
-              <h3>Summary</h3>
-              <dl>
-                <dt>Max drawdown</dt>
-                <dd>₹{Number(summary.max_drawdown_amount).toFixed(2)} at {summary.max_drawdown_datetime}</dd>
+            <>
+              <div className="results-summary">
+                <h3>Summary</h3>
+                <dl>
+                  <dt>Max drawdown</dt>
+<dd>₹{Number(summary.max_drawdown_amount).toFixed(2)} at {formatDateTime(summary.max_drawdown_datetime)}</dd>
                 <dt>Max profit</dt>
-                <dd>₹{Number(summary.max_profit_amount).toFixed(2)} at {summary.max_profit_datetime}</dd>
+                <dd>₹{Number(summary.max_profit_amount).toFixed(2)} at {formatDateTime(summary.max_profit_datetime)}</dd>
                 <dt>Final PnL</dt>
                 <dd>₹{Number(summary.final_pnl).toFixed(2)}</dd>
                 <dt>Start</dt>
-                <dd>{summary.start_datetime}</dd>
+                <dd>{formatDateTime(summary.start_datetime)}</dd>
                 <dt>End</dt>
-                <dd>{summary.end_datetime}</dd>
-                <dt>Bars</dt>
-                <dd>{summary.num_bars}</dd>
-              </dl>
-            </div>
+                <dd>{formatDateTime(summary.end_datetime)}</dd>
+                  <dt>Bars</dt>
+                  <dd>{summary.num_bars}</dd>
+                </dl>
+              </div>
+              <button type="button" onClick={saveRun} className="save-run-btn" style={{ marginBottom: 12 }}>
+                Save run
+              </button>
+            </>
           )}
           <div className="table-wrap">
             <table>
@@ -315,7 +415,13 @@ function App() {
                   return (
                     <tr key={i} className={phaseChanged ? 'phase-change' : ''}>
                       {columns.map((col) => (
-                        <td key={col}>{row[col] != null ? String(row[col]) : ''}</td>
+                        <td key={col}>
+                          {row[col] != null
+                            ? col === 'timestamp'
+                              ? formatDateTime(row[col])
+                              : String(row[col])
+                            : ''}
+                        </td>
                       ))}
                     </tr>
                   )
@@ -323,6 +429,84 @@ function App() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {runsForUnderlying.length > 0 && (
+        <section className="card combined-results-section">
+          <div className="combined-results-header">
+            <h2>Combined results</h2>
+            <button type="button" onClick={clearSavedData} className="clear-saved-btn">
+              Clear saved data
+            </button>
+          </div>
+          <p className="combined-hint">Select one or more saved expiries to see combined summary and per-expiry table.</p>
+          <div className="combined-expiry-select">
+            <button type="button" onClick={selectAllSavedExpiries} className="select-all-expiries-btn">
+              {selectedExpiriesForCombine.length === runsForUnderlying.length ? 'Deselect all' : 'Select all'}
+            </button>
+            <div className="expiry-checkboxes">
+              {runsForUnderlying.map((r) => (
+                <label key={`${r.underlying_key}-${r.expiry_date}`} className="expiry-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedExpiriesForCombine.includes(r.expiry_date)}
+                    onChange={() => toggleExpiryForCombine(r.expiry_date)}
+                  />
+                  <span>{r.expiry_date}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {selectedRuns.length > 0 && combinedSummary && (
+            <>
+              <div className="results-summary combined-summary">
+                <h3>Combined summary</h3>
+                <dl>
+                  <dt>Max drawdown</dt>
+                  <dd>₹{Number(combinedSummary.max_drawdown_amount).toFixed(2)} at {formatDateTime(combinedSummary.max_drawdown_datetime)}</dd>
+                  <dt>Max profit</dt>
+                  <dd>₹{Number(combinedSummary.max_profit_amount).toFixed(2)} at {formatDateTime(combinedSummary.max_profit_datetime)}</dd>
+                  <dt>Final PnL</dt>
+                  <dd>₹{Number(combinedSummary.final_pnl).toFixed(2)}</dd>
+                  <dt>Start</dt>
+                  <dd>{formatDateTime(combinedSummary.start_datetime)}</dd>
+                  <dt>End</dt>
+                  <dd>{formatDateTime(combinedSummary.end_datetime)}</dd>
+                  <dt>Bars</dt>
+                  <dd>{combinedSummary.num_bars}</dd>
+                </dl>
+              </div>
+              <div className="table-wrap combined-expiry-table-wrap">
+                <table className="combined-expiry-table">
+                  <thead>
+                    <tr>
+                      <th>Expiry</th>
+                      <th>Final PnL</th>
+                      <th>Max drawdown</th>
+                      <th>Max profit</th>
+                      <th>Bars</th>
+                      <th>Start</th>
+                      <th>End</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedRuns.map((r) => (
+                      <tr key={`${r.underlying_key}-${r.expiry_date}`}>
+                        <td>{r.expiry_date}</td>
+                        <td>₹{Number(r.summary.final_pnl).toFixed(2)}</td>
+                        <td>₹{Number(r.summary.max_drawdown_amount).toFixed(2)} at {formatDateTime(r.summary.max_drawdown_datetime)}</td>
+                        <td>₹{Number(r.summary.max_profit_amount).toFixed(2)} at {formatDateTime(r.summary.max_profit_datetime)}</td>
+                        <td>{r.summary.num_bars}</td>
+                        <td>{formatDateTime(r.summary.start_datetime)}</td>
+                        <td>{formatDateTime(r.summary.end_datetime)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </section>
       )}
     </div>
