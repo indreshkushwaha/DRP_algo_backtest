@@ -159,14 +159,6 @@ function App() {
       {(data.length > 0 && columns.length > 0) && (
         <section className="card table-section">
           <h2>Results</h2>
-          <details className="phase-help">
-            <summary>When do phases change? (CE vs PE)</summary>
-            <div className="phase-help-content">
-              <p><strong>phase_ce</strong> (call pair phase) advances when <strong>short PE</strong> (put premium) exceeds the trigger. The backtest then <em>covers the call pair</em>, realizes that PnL, and <em>re-enters a new call pair</em> at the re-entry target premium. So a higher put premium triggers a call-side re-entry.</p>
-              <p><strong>phase_pe</strong> (put pair phase) advances when <strong>short CE</strong> (call premium) exceeds the trigger. The backtest <em>covers the put pair</em>, realizes that PnL, and <em>re-enters a new put pair</em> at the re-entry target. So a higher call premium triggers a put-side re-entry.</p>
-              <p>Triggers: Phase 2 = first trigger (e.g. 68), Phase 3 = second trigger (e.g. 98). When the short leg exceeds the Phase 4 trigger (e.g. 115), that pair is <em>squared off</em> (no re-entry); PnL for that leg stays 0 afterward. Rows with a thick border in the table are where phase_ce or phase_pe changed.</p>
-            </div>
-          </details>
           <div className="table-wrap">
             <table>
               <thead>
