@@ -64,7 +64,6 @@ def backtest_date_range(
     expiry_weekday: int,          # 0=Mon … 3=Thu
     entry_days_before_expiry: int,
     entry_time: str,              # e.g. "14:50:00"
-    output_excel: str,
     # ---- Backtest parameters (same as find_and_backtest.run) ----
     target_premium: float,
     underlying_key: str,
@@ -83,6 +82,7 @@ def backtest_date_range(
     phase4_target_reentry: float = 60.0,
     stoploss_amount: float | None = None,
     delay_between_expiries_seconds: float = 30.0,  # pause between expiries to avoid 429
+    output_excel: str | None = None,  # None = do not write Excel (e.g. when called from API)
 ) -> "pd.DataFrame | None":
     """
     Run backtests for every expiry in [start_date, end_date] and combine
@@ -101,6 +101,7 @@ def backtest_date_range(
 
     # 2. Loop over each expiry and collect results
     all_dfs: list[pd.DataFrame] = []
+    skipped_expiries: list[str] = []  # expiries that returned no data (e.g. 429)
 
     for expiry in expiries:
         entry_dt = entry_datetime_for_expiry(expiry, entry_days_before_expiry, entry_time)
@@ -135,6 +136,7 @@ def backtest_date_range(
             all_dfs.append(result_df)
             print(f"Collected {len(result_df)} rows for expiry {expiry}")
         else:
+            skipped_expiries.append(expiry)
             print(f"No data returned for expiry {expiry}, skipping.")
 
         # Pause between expiries to stay under Upstox per-minute rate limit
@@ -148,21 +150,39 @@ def backtest_date_range(
         return None
 
     combined = pd.concat(all_dfs)
-    combined = combined.sort_index()  # sort by timestamp across all expiries
+    # Keep order: one block per expiry (do not sort by timestamp globally, which would mix weeks)
+    combined = combined.sort_values(by=["expiry"])
 
-    # Save to Excel
-    combined.to_excel(output_excel, index=True)
-    print(f"\nCombined results ({len(combined)} rows from {len(all_dfs)} expiries) saved to {output_excel}")
+    # Build summary: include skipped expiries, then per-expiry final PnL, then combined total
+    summary_rows = []
+    for exp in skipped_expiries:
+        summary_rows.append({"expiry": exp, "final_total_pnl": "No data (skipped)"})
+    if "total_pnl" in combined.columns:
+        for expiry in sorted(combined["expiry"].unique()):
+            subset = combined[combined["expiry"] == expiry]
+            final_pnl = subset["total_pnl"].iloc[-1]
+            summary_rows.append({"expiry": expiry, "final_total_pnl": final_pnl})
+        overall = combined.groupby("expiry")["total_pnl"].last().sum()
+        summary_rows.append({"expiry": "Combined", "final_total_pnl": overall})
+    summary_df = pd.DataFrame(summary_rows)
+
+    # Write Data sheet with timestamp as a normal column so Excel shows it (index can appear blank)
+    data_to_write = combined.reset_index()
+    if data_to_write.index.name is None and "timestamp" not in data_to_write.columns:
+        data_to_write = data_to_write.rename(columns={"index": "timestamp"})
+
+    if output_excel is not None:
+        # Save to Excel: Data = bar data, Summary = per-expiry and combined amount
+        with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
+            data_to_write.to_excel(writer, sheet_name="Data", index=False)
+            if not summary_df.empty:
+                summary_df.to_excel(writer, sheet_name="Summary", index=False)
+        print(f"\nCombined results ({len(combined)} rows from {len(all_dfs)} expiries) saved to {output_excel}")
 
     # Print per-expiry summary
     print("\n--- Per-expiry PnL summary ---")
-    for expiry in combined["expiry"].unique():
-        subset = combined[combined["expiry"] == expiry]
-        final_pnl = subset["total_pnl"].iloc[-1] if "total_pnl" in subset.columns else "N/A"
-        print(f"  Expiry {expiry}: final total_pnl = {final_pnl}")
-
-    overall = combined.groupby("expiry")["total_pnl"].last().sum() if "total_pnl" in combined.columns else "N/A"
-    print(f"  Overall total PnL: {overall}")
+    for _, row in summary_df.iterrows():
+        print(f"  {row['expiry']}: final total_pnl = {row['final_total_pnl']}")
 
     return combined
 
@@ -173,8 +193,8 @@ def backtest_date_range(
 if __name__ == "__main__":
     backtest_date_range(
         # ---- Range parameters ----
-        start_date="2025-07-01",
-        end_date="2025-8-31",
+        start_date="2025-08-15",
+        end_date="2025-08-31",
         expiry_weekday=1,             # 1 = Tuesday (BSE SENSEX weekly expiry)
         entry_days_before_expiry=4,   # enter 4 days before expiry (Friday before Tuesday)
         entry_time="14:50:00",
