@@ -554,6 +554,8 @@ def run_weekly_backtest_phase2(
             "hedge_pe_close": c_pe_h,
             "short_ce_strike": ce_short_strike,
             "short_pe_strike": pe_short_strike,
+            "hedge_ce": f"{int(ce_short_strike + hedge_difference)} CE",
+            "hedge_pe": f"{int(pe_short_strike - hedge_difference)} PE",
             "short_ce_pnl": pnl_ce_short,
             "hedge_ce_pnl": pnl_ce_hedge,
             "short_pe_pnl": pnl_pe_short,

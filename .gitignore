@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 /venv
+/vevnv
 /packages
 /.venv_run
-__pycache__/
+.venv/
+.~lock*
+backtest_results_fixed.xlsx
