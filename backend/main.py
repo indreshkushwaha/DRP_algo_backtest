@@ -90,6 +90,38 @@ def put_token(body: TokenUpdate):
     return {"ok": True}
 
 
+def _compute_summary(result_df):
+    """Build summary dict from result DataFrame (must have timestamp index and total_pnl column)."""
+    if "total_pnl" not in result_df.columns or result_df.empty:
+        return {}
+    pnl = result_df["total_pnl"]
+    running_max = pnl.cummax()
+    drawdown = running_max - pnl
+    max_dd = drawdown.max()
+    max_dd_idx = drawdown.idxmax()
+    max_profit = pnl.max()
+    max_profit_idx = pnl.idxmax()
+    index = result_df.index
+    start_ts = index[0]
+    end_ts = index[-1]
+
+    def _ts_str(ts):
+        if hasattr(ts, "isoformat"):
+            return ts.isoformat()
+        return str(ts)
+
+    return {
+        "max_drawdown_amount": round(float(max_dd), 2),
+        "max_drawdown_datetime": _ts_str(max_dd_idx),
+        "max_profit_amount": round(float(max_profit), 2),
+        "max_profit_datetime": _ts_str(max_profit_idx),
+        "final_pnl": round(float(pnl.iloc[-1]), 2),
+        "start_datetime": _ts_str(start_ts),
+        "end_datetime": _ts_str(end_ts),
+        "num_bars": int(len(result_df)),
+    }
+
+
 @app.get("/api/config/defaults")
 def get_defaults():
     """Return default backtest config for form prefilling."""
@@ -128,6 +160,10 @@ def run_backtest(config: BacktestConfig):
         raise HTTPException(status_code=500, detail=f"Backtest error: {str(e)}")
     if result_df is None:
         raise HTTPException(status_code=400, detail="Backtest returned no data.")
+
+    # Compute summary from total_pnl (before reset_index)
+    summary = _compute_summary(result_df)
+
     # Convert DataFrame to JSON-friendly structure
     result_df = result_df.reset_index()
     result_df["timestamp"] = result_df["timestamp"].astype(str)
@@ -144,4 +180,4 @@ def run_backtest(config: BacktestConfig):
                 row[k] = str(v)
             else:
                 row[k] = v
-    return {"data": data, "columns": columns}
+    return {"data": data, "columns": columns, "summary": summary}

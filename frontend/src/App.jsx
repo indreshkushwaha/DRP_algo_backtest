@@ -30,6 +30,7 @@ function App() {
   const [config, setConfig] = useState(defaultConfig)
   const [data, setData] = useState([])
   const [columns, setColumns] = useState([])
+  const [summary, setSummary] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [backtestLoading, setBacktestLoading] = useState(false)
@@ -66,6 +67,7 @@ function App() {
     setError('')
     setData([])
     setColumns([])
+    setSummary(null)
     setBacktestLoading(true)
     const body = {
       ...config,
@@ -91,6 +93,7 @@ function App() {
       .then((res) => {
         setData(res.data || [])
         setColumns(res.columns || [])
+        setSummary(res.summary || null)
       })
       .catch((e) => setError(e.message || 'Backtest failed'))
       .finally(() => setBacktestLoading(false))
@@ -159,6 +162,25 @@ function App() {
       {(data.length > 0 && columns.length > 0) && (
         <section className="card table-section">
           <h2>Results</h2>
+          {summary && Object.keys(summary).length > 0 && (
+            <div className="results-summary">
+              <h3>Summary</h3>
+              <dl>
+                <dt>Max drawdown</dt>
+                <dd>₹{Number(summary.max_drawdown_amount).toFixed(2)} at {summary.max_drawdown_datetime}</dd>
+                <dt>Max profit</dt>
+                <dd>₹{Number(summary.max_profit_amount).toFixed(2)} at {summary.max_profit_datetime}</dd>
+                <dt>Final PnL</dt>
+                <dd>₹{Number(summary.final_pnl).toFixed(2)}</dd>
+                <dt>Start</dt>
+                <dd>{summary.start_datetime}</dd>
+                <dt>End</dt>
+                <dd>{summary.end_datetime}</dd>
+                <dt>Bars</dt>
+                <dd>{summary.num_bars}</dd>
+              </dl>
+            </div>
+          )}
           <div className="table-wrap">
             <table>
               <thead>
