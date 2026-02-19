@@ -9,7 +9,6 @@ Usage:
     Update CONFIGURATION below and run: python find_and_backtest.py
 """
 
-import os
 import sys
 import urllib.parse
 from datetime import datetime
@@ -53,18 +52,9 @@ BASE_URL = "https://api.upstox.com/v2"
 
 
 def _get_access_token():
-    """Read token from token_config.py first, then fall back to .env."""
-    try:
-        import token_config
-        token = (getattr(token_config, "UPSTOX_ACCESS_TOKEN", None) or "").strip()
-    except Exception:
-        token = ""
-    if not token or token == "your_access_token_here":
-        token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
-    if not token or token == "your_access_token_here":
-        print("ERROR: Set UPSTOX_ACCESS_TOKEN in .env or in token_config.py (or via frontend Settings)")
-        sys.exit(1)
-    return token
+    """Read token from token_config.py (single source; can be updated via frontend Settings)."""
+    from get_token import require_access_token
+    return require_access_token()
 
 
 def get_underlying_ltp_at_entry(underlying_key: str, entry_dt: datetime, token: str) -> float:

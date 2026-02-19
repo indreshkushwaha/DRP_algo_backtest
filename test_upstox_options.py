@@ -7,7 +7,7 @@ Tests whether the Upstox API is correctly retrieving
 option data for NIFTY 50 expiring options.
 
 Usage:
-    1. Paste your access token in `.env`
+    1. Set your access token in token_config.py (or save via frontend Settings)
     2. pip install -r requirements.txt
     3. python test_upstox_options.py
 """
@@ -17,8 +17,9 @@ import sys
 from datetime import datetime
 
 import requests
-from dotenv import load_dotenv
 from tabulate import tabulate
+
+from get_token import require_access_token
 
 # ── Configuration ────────────────────────────────────────────────────────────
 BASE_URL = "https://api.upstox.com/v2"
@@ -29,14 +30,8 @@ NUM_STRIKES_AROUND_ATM = 10                     # Show ±10 strikes around ATM
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def load_access_token() -> str:
-    """Load access token from .env file."""
-    load_dotenv()
-    token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
-    if not token or token == "your_access_token_here":
-        print("❌ ERROR: Please set your UPSTOX_ACCESS_TOKEN in the .env file.")
-        print("   Open .env and replace 'your_access_token_here' with your actual token.")
-        sys.exit(1)
-    return token
+    """Load access token from token_config.py."""
+    return require_access_token()
 
 
 def make_request(endpoint: str, params: dict, token: str) -> dict:

@@ -19,8 +19,9 @@ from datetime import datetime, timedelta
 
 import requests
 import pandas as pd
-from dotenv import load_dotenv
 from tabulate import tabulate
+
+from get_token import require_access_token
 
 # ── Configuration ────────────────────────────────────────────────────────────
 # UPDATE THESE VALUES
@@ -36,13 +37,8 @@ STRIKE_GAP = 100
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def load_access_token() -> str:
-    """Load access token from .env file."""
-    load_dotenv()
-    token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
-    if not token or token == "your_access_token_here":
-        print("❌ ERROR: Please set your UPSTOX_ACCESS_TOKEN in the .env file.")
-        sys.exit(1)
-    return token
+    """Load access token from token_config.py."""
+    return require_access_token()
 
 
 def make_request(url: str, params: dict | None = None, token: str = "") -> dict:

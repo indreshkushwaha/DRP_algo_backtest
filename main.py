@@ -3,12 +3,10 @@ import pandas as pd
 import os
 from datetime import datetime
 
-from dotenv import load_dotenv
-
-load_dotenv()
+from get_token import get_access_token
 
 BASE_URL = "https://api.upstox.com/v2"
-ACCESS_TOKEN = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+ACCESS_TOKEN = get_access_token()
 
 
 def fetch_candle_data(instrument_key, from_date, to_date, interval="1minute"):

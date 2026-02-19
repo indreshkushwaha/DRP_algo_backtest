@@ -1,12 +1,11 @@
 import requests
 import pandas as pd
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+from get_token import get_access_token
 
 BASE_URL = "https://api.upstox.com/v2"
-ACCESS_TOKEN = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+ACCESS_TOKEN = get_access_token()
 
 
 def get_expiries(underlying_key: str, access_token: str | None = None) -> tuple[list[str], str | None]:

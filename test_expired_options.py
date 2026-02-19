@@ -7,7 +7,7 @@ Tests access to historical data for expired options (NIFTY 50).
 Verifies the 'Expired Instruments API' (requires Upstox Plus).
 
 Usage:
-    1. Paste your access token in `.env`
+    1. Set your access token in token_config.py (or save via frontend Settings)
     2. python test_expired_options.py
 """
 
@@ -17,8 +17,9 @@ from datetime import datetime, timedelta
 import urllib.parse
 
 import requests
-from dotenv import load_dotenv
 from tabulate import tabulate
+
+from get_token import require_access_token
 
 # ── Configuration ────────────────────────────────────────────────────────────
 BASE_URL = "https://api.upstox.com/v2"
@@ -29,13 +30,8 @@ INSTRUMENT_KEY_UNDERLYING = "NSE_INDEX|Nifty 50"
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def load_access_token() -> str:
-    """Load access token from .env file."""
-    load_dotenv()
-    token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
-    if not token or token == "your_access_token_here":
-        print("❌ ERROR: Please set your UPSTOX_ACCESS_TOKEN in the .env file.")
-        sys.exit(1)
-    return token
+    """Load access token from token_config.py."""
+    return require_access_token()
 
 
 def make_request(url: str, params: dict | None = None, token: str = "") -> dict:
