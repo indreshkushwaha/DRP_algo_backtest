@@ -1,4 +1,13 @@
 import { useState, useEffect } from 'react'
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : 'https://drp-algo-backtest.onrender.com')
@@ -93,6 +102,7 @@ function App() {
   const [expiriesMessage, setExpiriesMessage] = useState('')
   const [savedRuns, setSavedRuns] = useState([])
   const [selectedExpiriesForCombine, setSelectedExpiriesForCombine] = useState([])
+  const [showGraph, setShowGraph] = useState(false)
 
   useEffect(() => {
     setSavedRuns(loadSavedRuns())
@@ -173,6 +183,7 @@ function App() {
     setData([])
     setColumns([])
     setSummary(null)
+    setShowGraph(false)
     setBacktestLoading(true)
     const body = {
       ...config,
@@ -396,6 +407,38 @@ function App() {
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => setShowGraph((s) => !s)}
+            className="save-run-btn"
+            style={{ marginBottom: 12 }}
+          >
+            {showGraph ? 'Hide graph' : 'Generate graph'}
+          </button>
+          {showGraph && (() => {
+            const chartData = data.filter((row) => row.total_pnl != null)
+            if (chartData.length === 0) return null
+            return (
+              <div style={{ width: '100%', height: 360, marginBottom: 16 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="timestamp"
+                      tickFormatter={(v) => formatDateTime(v).slice(0, 16)}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis tickFormatter={(v) => `₹${Number(v).toFixed(0)}`} />
+                    <Tooltip
+                      labelFormatter={(v) => formatDateTime(v)}
+                      formatter={(value) => [`₹${Number(value).toFixed(2)}`, 'PnL']}
+                    />
+                    <Line type="monotone" dataKey="total_pnl" stroke="var(--primary-color, #2563eb)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )
+          })()}
           <div className="table-wrap">
             <table>
               <thead>

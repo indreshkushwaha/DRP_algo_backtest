@@ -6,14 +6,15 @@ from datetime import datetime
 from get_token import get_access_token
 
 BASE_URL = "https://api.upstox.com/v2"
-ACCESS_TOKEN = get_access_token()
 
 
-def fetch_candle_data(instrument_key, from_date, to_date, interval="1minute"):
+def fetch_candle_data(instrument_key, from_date, to_date, interval="1minute", access_token=None):
     """
     Fetch historical candles from Upstox
-    interval: 1minute, 30minute, day, week, month (Upstox allowed)
+    interval: 1minute, 30minute, day, week, month (Upstox allowed).
+    Uses access_token if provided, otherwise current token from get_access_token().
     """
+    token = (access_token or get_access_token()).strip()
     # Use expired-instruments endpoint
     # Extend to_date by 1 day to ensure full day data is captured if API behavior is exclusive or timezone shifted
     import datetime
@@ -27,7 +28,7 @@ def fetch_candle_data(instrument_key, from_date, to_date, interval="1minute"):
     url = f"{BASE_URL}/expired-instruments/historical-candle/{instrument_key}/{interval}/{extended_to_date}/{from_date}"
 
     headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/json"
     }
 

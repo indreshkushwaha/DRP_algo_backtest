@@ -109,6 +109,7 @@ def get_option_premium_at_entry(instrument_key: str, entry_dt: datetime, token: 
             from_date=entry_dt.date(),
             to_date=entry_dt.date(),
             interval="1minute",
+            access_token=token,
         )
     except Exception as e:
         print(f"  Failed to fetch candles for {instrument_key}: {e}")
@@ -148,7 +149,7 @@ def find_instrument_to_short(
         return None
 
     # 2. Load contracts and filter by option_type
-    contracts_df = get_expired_option_contracts(underlying_key, expiry_date)
+    contracts_df = get_expired_option_contracts(underlying_key, expiry_date, access_token=token)
     filtered = contracts_df[contracts_df["instrument_type"].str.upper() == option_type.upper()]
     if filtered.empty:
         print(f"ERROR: No {option_type} contracts for expiry {expiry_date}")
@@ -191,6 +192,7 @@ def _resolve_hedge_contract(
     option_type: str,
     short_strike: float,
     hedge_difference: int,
+    token: str = "",
 ) -> tuple[str, int, float] | None:
     """
     Return (hedge_instrument_key, hedge_lot_size, hedge_strike).
@@ -204,7 +206,8 @@ def _resolve_hedge_contract(
         hedge_strike = short_strike - hedge_difference
     else:
         hedge_strike = short_strike + hedge_difference
-    contracts_df = get_expired_option_contracts(underlying_key, expiry_date)
+    token = (token or _get_access_token()).strip()
+    contracts_df = get_expired_option_contracts(underlying_key, expiry_date, access_token=token)
     filtered = contracts_df[contracts_df["instrument_type"].str.upper() == option_type.upper()]
     match = filtered[filtered["strike_price"] == hedge_strike]
     if match.empty:
@@ -274,7 +277,7 @@ def _fetch_multi_strike_candles(
     from get_instrument import get_expired_option_contracts
     from main import fetch_candle_data
 
-    contracts_df = get_expired_option_contracts(underlying_key, expiry_date)
+    contracts_df = get_expired_option_contracts(underlying_key, expiry_date, access_token=token)
     filtered = contracts_df[contracts_df["instrument_type"].str.upper() == option_type.upper()]
     all_strikes = sorted(filtered["strike_price"].unique())
     atm = round(get_underlying_ltp_at_entry(underlying_key, entry_dt, token) / strike_gap) * strike_gap
@@ -305,6 +308,7 @@ def _fetch_multi_strike_candles(
                 from_date=entry_dt.date(),
                 to_date=expiry_dt.date(),
                 interval=interval,
+                access_token=token,
             )
             df_short = df_short[(df_short.index >= entry_dt) & (df_short.index <= expiry_dt)]
             short_candles[strike] = df_short[["close"]].copy()
@@ -317,6 +321,7 @@ def _fetch_multi_strike_candles(
                 from_date=entry_dt.date(),
                 to_date=expiry_dt.date(),
                 interval=interval,
+                access_token=token,
             )
             df_hedge = df_hedge[(df_hedge.index >= entry_dt) & (df_hedge.index <= expiry_dt)]
             hedge_candles[strike] = df_hedge[["close"]].copy()
@@ -359,6 +364,13 @@ def run(
     import main
 
     token = _get_access_token()
+    # #region agent log
+    try:
+        with open("/media/indresh/Common_Storage/Devroad/upstox_algo/.cursor/debug.log", "a") as f:
+            f.write('{"id":"run_token","timestamp":' + str(int(__import__("time").time() * 1000)) + ',"location":"find_and_backtest.py:run","message":"Request-time token","data":{"prefix":"' + (token[:8] if token else "") + '"},"hypothesisId":"H2"}\n')
+    except Exception:
+        pass
+    # #endregion
     instruments: list[dict]
 
     if short_pair:
@@ -388,6 +400,7 @@ def run(
                 option_type="CE",
                 short_strike=strike_ce,
                 hedge_difference=hedge_difference,
+                token=token,
             )
             if ce_hedge is None:
                 print(f"ERROR: CE hedge strike {strike_ce + hedge_difference} not found. Aborting.")
@@ -420,6 +433,7 @@ def run(
                 option_type="PE",
                 short_strike=strike_pe,
                 hedge_difference=hedge_difference,
+                token=token,
             )
             if pe_hedge is None:
                 print(f"ERROR: PE hedge strike {strike_pe - hedge_difference} not found. Aborting.")

@@ -37,15 +37,24 @@ def get_expiries(underlying_key: str, access_token: str | None = None) -> tuple[
     return (list(raw) if isinstance(raw, list) else []), None
 
 
-def get_expired_option_contracts(underlying_key, expiry_date):
+def get_expired_option_contracts(underlying_key, expiry_date, access_token=None):
     """
     Fetch all expired option contracts for a given underlying and expiry date.
+    Uses access_token if provided, otherwise current token from get_access_token().
     """
+    # #region agent log
+    token = (access_token or get_access_token()).strip()
+    try:
+        with open("/media/indresh/Common_Storage/Devroad/upstox_algo/.cursor/debug.log", "a") as f:
+            f.write('{"id":"get_instrument_token","timestamp":' + str(int(__import__("time").time() * 1000)) + ',"location":"get_instrument.py:get_expired_option_contracts","message":"Token used for option contracts","data":{"token_source":"passed" if access_token else "get_access_token","prefix":"' + (token[:8] if token else "") + '"},"hypothesisId":"H1"}\n')
+    except Exception:
+        pass
+    # #endregion
 
     url = f"{BASE_URL}/expired-instruments/option/contract"
 
     headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/json"
     }
 
