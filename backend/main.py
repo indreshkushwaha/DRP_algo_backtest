@@ -103,6 +103,9 @@ class BacktestConfig(BaseModel):
     phase4_trigger_premium: float | None = 115.0
     phase4_target_reentry: float = 50.0
     stoploss_amount: float | None = 5000.0
+    margin: float | None = None
+    profit_pct: float | None = None
+    lot_size: int | None = None
 
 
 @app.get("/api/config/token")
@@ -215,6 +218,9 @@ def run_backtest(config: BacktestConfig):
             phase4_trigger_premium=config.phase4_trigger_premium,
             phase4_target_reentry=config.phase4_target_reentry,
             stoploss_amount=config.stoploss_amount,
+            margin=config.margin,
+            profit_pct=config.profit_pct,
+            lot_size=config.lot_size,
         )
     except SystemExit as e:
         raise HTTPException(status_code=400, detail="Backtest failed: check token and config.")

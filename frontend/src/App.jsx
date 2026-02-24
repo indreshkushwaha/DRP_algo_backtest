@@ -7,6 +7,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
+  ReferenceLine,
+  Label,
 } from 'recharts'
 import './App.css'
 
@@ -69,6 +72,9 @@ const defaultConfig = {
   phase4_trigger_premium: 115,
   phase4_target_reentry: 50,
   stoploss_amount: 5000,
+  margin: '',
+  profit_pct: '',
+  lot_size: 1,
 }
 
 const STORAGE_KEY = 'upstox_backtest_saved_runs'
@@ -102,7 +108,7 @@ function App() {
   const [expiriesMessage, setExpiriesMessage] = useState('')
   const [savedRuns, setSavedRuns] = useState([])
   const [selectedExpiriesForCombine, setSelectedExpiriesForCombine] = useState([])
-  const [showGraph, setShowGraph] = useState(false)
+  const [showGraph, setShowGraph] = useState(true)
   const [showTokenForm, setShowTokenForm] = useState(false)
   const tokenSavedTimeoutRef = useRef(null)
 
@@ -197,6 +203,11 @@ function App() {
 
   const runBacktest = () => {
     setError('')
+    const lotNum = config.lot_size === '' ? null : Number(config.lot_size)
+    if (lotNum != null && (Number.isNaN(lotNum) || lotNum < 1)) {
+      setError('Lot size cannot be less than 1')
+      return
+    }
     setData([])
     setColumns([])
     setSummary(null)
@@ -215,6 +226,9 @@ function App() {
       phase3_trigger_premium: config.phase3_trigger_premium === '' ? null : Number(config.phase3_trigger_premium),
       phase4_trigger_premium: config.phase4_trigger_premium === '' ? null : Number(config.phase4_trigger_premium),
       stoploss_amount: config.stoploss_amount === '' ? null : Number(config.stoploss_amount),
+      margin: config.margin === '' ? null : Number(config.margin),
+      profit_pct: config.profit_pct === '' ? null : Number(config.profit_pct),
+      lot_size: config.lot_size === '' ? null : Number(config.lot_size),
     }
     fetch(`${API_BASE}/api/backtest`, {
       method: 'POST',
@@ -238,6 +252,10 @@ function App() {
   }
 
   const updateConfig = (key, value) => {
+    if (key === 'lot_size' && value !== '') {
+      const num = Number(value)
+      if (!Number.isNaN(num) && num < 1) value = 1
+    }
     setConfig((c) => ({ ...c, [key]: value }))
   }
 
@@ -398,16 +416,17 @@ function App() {
           <label>Underlying key
             <input readOnly value={config.underlying_key} />
           </label>
-          <label>Tolerance <input type="number" step="0.1" value={config.tolerance} onChange={(e) => updateConfig('tolerance', e.target.value)} /></label>
           <label>Hedge difference <input type="number" value={config.hedge_difference ?? ''} onChange={(e) => updateConfig('hedge_difference', e.target.value)} placeholder="or empty" /></label>
-          <label>Square off when short below <input type="number" step="0.1" value={config.square_off_when_short_below ?? ''} onChange={(e) => updateConfig('square_off_when_short_below', e.target.value)} placeholder="or empty" /></label>
           <label>Phase2 trigger premium <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Phase2 target reentry <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} /></label>
-          <label>Phase2 strike range <input type="number" value={config.phase2_strike_range} onChange={(e) => updateConfig('phase2_strike_range', e.target.value)} /></label>
           <label>Phase3 trigger premium <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Phase3 target reentry <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} /></label>
           <label>Phase4 trigger premium <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Stoploss amount <input type="number" value={config.stoploss_amount ?? ''} onChange={(e) => updateConfig('stoploss_amount', e.target.value)} placeholder="or empty" /></label>
+          <label>Margin <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 100000" /></label>
+          <label>Profit % <input type="number" step="0.1" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 10" /></label>
+          <label>Profit amount (₹) <input type="number" readOnly value={(() => { const m = config.margin !== '' && config.margin != null ? Number(config.margin) : null; const p = config.profit_pct !== '' && config.profit_pct != null ? Number(config.profit_pct) : null; return (m != null && p != null && m > 0 && !Number.isNaN(m) && !Number.isNaN(p)) ? (m * p / 100) : ''; })()} placeholder="margin × profit %" /></label>
+          <label>Lot size <input type="number" min={1} value={config.lot_size ?? ''} onChange={(e) => updateConfig('lot_size', e.target.value)} placeholder="override instrument lot" /></label>
         </div>
         <button
           onClick={runBacktest}
@@ -454,32 +473,49 @@ function App() {
             className="save-run-btn btn-secondary"
             style={{ marginBottom: 12 }}
           >
-            {showGraph ? 'Hide graph' : 'Generate graph'}
+            {showGraph ? 'Show table' : 'Show graph'}
           </button>
           {showGraph && (() => {
             const chartData = data.filter((row) => row.total_pnl != null)
             if (chartData.length === 0) return null
+            const hasNetLegs = chartData[0]?.net_call_leg_pnl != null
+            const marginNum = config.margin !== '' && config.margin != null ? Number(config.margin) : null
+            const profitPctNum = config.profit_pct !== '' && config.profit_pct != null ? Number(config.profit_pct) : null
+            const profitTarget = marginNum != null && profitPctNum != null && marginNum > 0 ? marginNum * (profitPctNum / 100) : null
+            const chartHeight = 400
             return (
-              <div style={{ width: '100%', height: 360, marginBottom: 16 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <div className="graph-full-width" style={{ height: chartHeight, minHeight: chartHeight, marginBottom: 16, position: 'relative' }}>
+                <div className="chart-y-label" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%) rotate(-90deg)', whiteSpace: 'nowrap', fontSize: '0.875rem', color: 'var(--chart-text, #666)', zIndex: 1 }}>
+                  PnL (₹)
+                </div>
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: 88, bottom: 72 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="timestamp"
-                      tickFormatter={(v) => formatDateTime(v).slice(0, 16)}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis tickFormatter={(v) => `₹${Number(v).toFixed(0)}`} />
+                    <XAxis dataKey="timestamp" tick={false} />
+                    <YAxis width={70} tickFormatter={(v) => `₹${Number(v).toFixed(0)}`}>
+                      <Label value="PnL (₹)" angle={-90} position="insideLeft" style={{ textAnchor: 'middle' }} />
+                    </YAxis>
                     <Tooltip
                       labelFormatter={(v) => formatDateTime(v)}
-                      formatter={(value) => [`₹${Number(value).toFixed(2)}`, 'PnL']}
+                      formatter={(value, name) => [`₹${Number(value).toFixed(2)}`, name ?? 'PnL']}
                     />
-                    <Line type="monotone" dataKey="total_pnl" stroke="var(--primary-color, #2563eb)" strokeWidth={2} dot={false} />
+                    <Legend />
+                    {profitTarget != null && (
+                      <ReferenceLine y={profitTarget} stroke="black" label={{ value: 'Profit amount', position: 'right' }} />
+                    )}
+                    <Line type="monotone" dataKey="total_pnl" name="Total PnL" stroke="var(--primary-color, #2563eb)" strokeWidth={4} dot={false} />
+                    {hasNetLegs && (
+                      <>
+                        <Line type="monotone" dataKey="net_call_leg_pnl" name="Net call leg" stroke="#16a34a" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="net_put_leg_pnl" name="Net put leg" stroke="#ca8a04" strokeWidth={2} dot={false} />
+                      </>
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             )
           })()}
+          {!showGraph && (
           <div className="table-wrap">
             <table>
               <thead>
@@ -513,6 +549,7 @@ function App() {
               </tbody>
             </table>
           </div>
+          )}
         </section>
       )}
 

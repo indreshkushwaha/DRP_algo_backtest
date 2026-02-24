@@ -231,6 +231,8 @@ def run_weekly_backtest_phase2(
     phase4_trigger_premium: float | None = None,
     phase4_target_reentry: float = 60.0,
     stoploss_amount: float | None = None,
+    margin: float | None = None,
+    profit_pct: float | None = None,
 ):
     """
     Stateful backtest with phase-based re-entry:
@@ -275,6 +277,12 @@ def run_weekly_backtest_phase2(
     phase_config = [(trigger_premium, target_reentry_premium)]
     if phase3_trigger_premium is not None:
         phase_config.append((phase3_trigger_premium, phase3_target_reentry))
+
+    profit_trigger_amount = (
+        (margin * (profit_pct / 100.0))
+        if (margin is not None and profit_pct is not None and margin > 0)
+        else None
+    )
 
     # State
     ce_short_strike = initial_ce_short_strike
@@ -454,13 +462,20 @@ def run_weekly_backtest_phase2(
 
         # ---- Phase-based: short CE exceeds next phase trigger -> cover put pair, re-enter put once ----
         # Skip when call leg is already in Phase 4 (no phase jump for remaining put leg).
+        premium_trigger_ce = (
+            close_ce_short is not None
+            and put_pair_phase <= len(phase_config)
+            and float(close_ce_short) > phase_config[put_pair_phase - 1][0]
+        )
+        profit_trigger_ce = (
+            profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
+        )
         if (
             not any_leg_phase4
             and call_pair_phase < 4
             and not call_pair_squared_off
-            and close_ce_short is not None
             and put_pair_phase <= len(phase_config)
-            and float(close_ce_short) > phase_config[put_pair_phase - 1][0]
+            and (premium_trigger_ce or profit_trigger_ce)
         ):
             next_phase = put_pair_phase + 1
             phase_label = f"[Phase{next_phase}]"
@@ -500,14 +515,21 @@ def run_weekly_backtest_phase2(
 
         # ---- Phase-based: short PE exceeds next phase trigger -> cover call pair, re-enter call once ----
         # Skip when put leg is already in Phase 4 (no phase jump for remaining call leg).
+        premium_trigger_pe = (
+            close_pe_short is not None
+            and call_pair_phase <= len(phase_config)
+            and float(close_pe_short) > phase_config[call_pair_phase - 1][0]
+        )
+        profit_trigger_pe = (
+            profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
+        )
         if (
             not any_leg_phase4
             and put_pair_phase < 4
             and not put_pair_squared_off
             and not call_pair_squared_off
-            and close_pe_short is not None
             and call_pair_phase <= len(phase_config)
-            and float(close_pe_short) > phase_config[call_pair_phase - 1][0]
+            and (premium_trigger_pe or profit_trigger_pe)
         ):
             next_phase = call_pair_phase + 1
             phase_label = f"[Phase{next_phase}]"
@@ -581,6 +603,8 @@ def run_weekly_backtest_phase2(
             "hedge_ce_pnl": pnl_ce_hedge,
             "short_pe_pnl": pnl_pe_short,
             "hedge_pe_pnl": pnl_pe_hedge,
+            "net_call_leg_pnl": pnl_ce_short + pnl_ce_hedge,
+            "net_put_leg_pnl": pnl_pe_short + pnl_pe_hedge,
             "total_pnl": total_pnl,
         })
 

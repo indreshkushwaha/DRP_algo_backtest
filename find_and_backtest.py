@@ -352,6 +352,9 @@ def run(
     phase4_trigger_premium: float | None = None,
     phase4_target_reentry: float = 60.0,
     stoploss_amount: float | None = None,
+    margin: float | None = None,
+    profit_pct: float | None = None,
+    lot_size: int | None = None,
 ) -> pd.DataFrame | None:
     """
     Find instrument(s) to short and run backtest.
@@ -442,6 +445,10 @@ def run(
             print(f"Hedge PE (long): {hedge_pe_key} (strike={hedge_pe_strike}, lot_size={hedge_pe_lot})")
             instruments.append({"instrument_key": hedge_pe_key, "side": "BUY", "lot_size": hedge_pe_lot})
 
+        if lot_size is not None:
+            for leg in instruments:
+                leg["lot_size"] = lot_size
+
         expiry_datetime = f"{expiry_date} 15:30:00"
         if phase2_trigger_premium is not None and len(instruments) == 4 and hedge_difference:
             # Phase 2: pre-fetch multi-strike candles and run stateful backtest with re-entry
@@ -489,6 +496,11 @@ def run(
                     square_off_short_below=None,
                 )
             else:
+                if lot_size is not None:
+                    ce_short_lots = {s: lot_size for s in ce_short_lots}
+                    ce_hedge_lots = {s: lot_size for s in ce_hedge_lots}
+                    pe_short_lots = {s: lot_size for s in pe_short_lots}
+                    pe_hedge_lots = {s: lot_size for s in pe_hedge_lots}
                 result_df = main.run_weekly_backtest_phase2(
                     entry_datetime=entry_datetime,
                     expiry_datetime=expiry_datetime,
@@ -513,6 +525,8 @@ def run(
                     phase4_trigger_premium=phase4_trigger_premium,
                     phase4_target_reentry=phase4_target_reentry,
                     stoploss_amount=stoploss_amount,
+                    margin=margin,
+                    profit_pct=profit_pct,
                 )
         else:
             result_df = main.run_weekly_backtest(
@@ -537,11 +551,11 @@ def run(
             print("Aborting: could not find instrument to short.")
             return None
 
-        instrument_key, lot_size, strike, premium = result
-        print(f"Instrument to short: {instrument_key} (strike={strike}, lot_size={lot_size}, entry premium={premium:.2f})")
+        instrument_key, inst_lot, strike, premium = result
+        print(f"Instrument to short: {instrument_key} (strike={strike}, lot_size={inst_lot}, entry premium={premium:.2f})")
 
         instruments = [
-            {"instrument_key": instrument_key, "side": "SELL", "lot_size": lot_size},
+            {"instrument_key": instrument_key, "side": "SELL", "lot_size": inst_lot},
         ]
         if hedge_difference:
             hedge_result = _resolve_hedge_contract(
@@ -560,6 +574,10 @@ def run(
             instruments.append(
                 {"instrument_key": hedge_instrument_key, "side": "BUY", "lot_size": hedge_lot_size},
             )
+
+        if lot_size is not None:
+            for leg in instruments:
+                leg["lot_size"] = lot_size
 
         expiry_datetime = f"{expiry_date} 15:30:00"
         result_df = main.run_weekly_backtest(
