@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   LineChart,
   Line,
@@ -103,9 +103,17 @@ function App() {
   const [savedRuns, setSavedRuns] = useState([])
   const [selectedExpiriesForCombine, setSelectedExpiriesForCombine] = useState([])
   const [showGraph, setShowGraph] = useState(false)
+  const [showTokenForm, setShowTokenForm] = useState(false)
+  const tokenSavedTimeoutRef = useRef(null)
 
   useEffect(() => {
     setSavedRuns(loadSavedRuns())
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (tokenSavedTimeoutRef.current) clearTimeout(tokenSavedTimeoutRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -165,6 +173,10 @@ function App() {
     setError('')
     setTokenSaved(false)
     setLoading(true)
+    if (tokenSavedTimeoutRef.current) {
+      clearTimeout(tokenSavedTimeoutRef.current)
+      tokenSavedTimeoutRef.current = null
+    }
     fetch(`${API_BASE}/api/config/token`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -172,7 +184,12 @@ function App() {
     })
       .then((r) => {
         if (!r.ok) throw new Error('Failed to save token')
+        setShowTokenForm(false)
         setTokenSaved(true)
+        tokenSavedTimeoutRef.current = setTimeout(() => {
+          setTokenSaved(false)
+          tokenSavedTimeoutRef.current = null
+        }, 2500)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -295,22 +312,63 @@ function App() {
     <div className="app">
       <h1>Upstox Backtest</h1>
 
+      <section className="card card-token">
+        <h2>API</h2>
+        {!showTokenForm ? (
+          <>
+            <button type="button" onClick={() => setShowTokenForm(true)} className="btn-secondary">
+              Update API token
+            </button>
+            {tokenSaved && <span className="token-saved-msg">Token updated</span>}
+          </>
+        ) : (
+          <div className="token-form-block">
+            <label>
+              Upstox access token
+              <input
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Paste your Upstox API access token"
+                className="input-full"
+              />
+            </label>
+            <div className="token-form-actions">
+              <button onClick={saveToken} disabled={loading} className="btn-secondary">
+                {loading ? 'Saving…' : 'Save token'}
+              </button>
+              <button type="button" onClick={() => setShowTokenForm(false)} className="btn-ghost">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
       <section className="card">
-        <h2>Settings</h2>
-        <label>
-          Upstox access token
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Paste your Upstox API access token"
-            style={{ width: '100%', marginTop: 4, padding: 8 }}
-          />
-        </label>
-        <button onClick={saveToken} disabled={loading} style={{ marginTop: 8 }}>
-          {loading ? 'Saving…' : 'Save token'}
-        </button>
-        {tokenSaved && <span style={{ marginLeft: 8, color: 'green' }}>Saved.</span>}
+        <h2>Expiry dates</h2>
+        <p className="section-hint">Set the date range and fetch available expiries before running a backtest.</p>
+        <div className="form-grid form-grid-compact">
+          <label>
+            From date
+            <input type="date" value={expiryFromDate} onChange={(e) => setExpiryFromDate(e.target.value)} />
+          </label>
+          <label>
+            To date
+            <input type="date" value={expiryToDate} onChange={(e) => setExpiryToDate(e.target.value)} />
+          </label>
+          <div className="form-grid-button-wrap">
+            <button type="button" onClick={fetchExpiries} disabled={expiriesLoading || !config.underlying_key || !expiryFromDate || !expiryToDate} className="btn-secondary">
+              {expiriesLoading ? 'Fetching…' : 'Fetch / update expiries'}
+            </button>
+          </div>
+        </div>
+        {(expiriesError || expiriesMessage) && (
+          <div className="expiries-note">
+            {expiriesError && <div className="expiries-error">{expiriesError}</div>}
+            {expiriesMessage && <div className="expiries-message">{expiriesMessage}</div>}
+          </div>
+        )}
       </section>
 
       <section className="card">
@@ -325,12 +383,6 @@ function App() {
           </label>
           <label>Entry time <input type="time" value={config.entry_time ?? '13:15'} onChange={(e) => updateConfig('entry_time', e.target.value)} /></label>
           <label>Target premium <input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
-          <label>From date
-            <input type="date" value={expiryFromDate} onChange={(e) => setExpiryFromDate(e.target.value)} />
-          </label>
-          <label>To date
-            <input type="date" value={expiryToDate} onChange={(e) => setExpiryToDate(e.target.value)} />
-          </label>
           <label>Expiry date
             <select
               value={expiries.length && expiries.includes(config.expiry_date) ? config.expiry_date : ''}
@@ -343,17 +395,6 @@ function App() {
               ))}
             </select>
           </label>
-          <label>
-            <button type="button" onClick={fetchExpiries} disabled={expiriesLoading || !config.underlying_key || !expiryFromDate || !expiryToDate}>
-              {expiriesLoading ? 'Fetching…' : 'Fetch / update expiries'}
-            </button>
-          </label>
-          {(expiriesError || expiriesMessage) && (
-            <div className="expiries-note" style={{ gridColumn: '1 / -1', fontSize: '0.9rem', marginTop: -4 }}>
-              {expiriesError && <div className="expiries-error" style={{ color: 'var(--error-color, #ff6b6b)' }}>{expiriesError}</div>}
-              {expiriesMessage && <div className="expiries-message" style={{ color: 'var(--message-color, #888)' }}>{expiriesMessage}</div>}
-            </div>
-          )}
           <label>Underlying key
             <input readOnly value={config.underlying_key} />
           </label>
@@ -402,7 +443,7 @@ function App() {
                   <dd>{summary.num_bars}</dd>
                 </dl>
               </div>
-              <button type="button" onClick={saveRun} className="save-run-btn" style={{ marginBottom: 12 }}>
+              <button type="button" onClick={saveRun} className="save-run-btn btn-secondary" style={{ marginBottom: 12 }}>
                 Save run
               </button>
             </>
@@ -410,7 +451,7 @@ function App() {
           <button
             type="button"
             onClick={() => setShowGraph((s) => !s)}
-            className="save-run-btn"
+            className="save-run-btn btn-secondary"
             style={{ marginBottom: 12 }}
           >
             {showGraph ? 'Hide graph' : 'Generate graph'}

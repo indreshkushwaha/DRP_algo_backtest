@@ -1,31 +1,59 @@
 .app {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .app h1 {
-  margin-bottom: 1.5rem;
+  margin: 0 0 0.25rem 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .card {
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  border-radius: 8px;
+  padding: 1.75rem;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 @media (prefers-color-scheme: light) {
   .card {
-    border-color: rgba(0, 0, 0, 0.1);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
 }
 
 .card h2 {
-  margin-top: 0;
-  margin-bottom: 1rem;
-  font-size: 1.25rem;
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-color-scheme: light) {
+  .card h2 {
+    color: rgba(0, 0, 0, 0.55);
+  }
+}
+
+.section-hint {
+  margin: -0.5rem 0 1rem 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+@media (prefers-color-scheme: light) {
+  .section-hint {
+    color: rgba(0, 0, 0, 0.5);
+  }
 }
 
 .form-grid {
@@ -47,9 +75,16 @@
 
 .form-grid input,
 .form-grid select {
-  padding: 0.4rem 0.6rem;
-  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
   border: 1px solid #555;
+  font-size: 0.9375rem;
+}
+
+.form-grid input:focus,
+.form-grid select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.35);
 }
 
 .form-grid input[readonly] {
@@ -62,23 +97,173 @@
   .form-grid select {
     border-color: #ccc;
   }
+  .form-grid input:focus,
+  .form-grid select:focus {
+    box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.25);
+  }
   .form-grid input[readonly] {
     background-color: #eee;
   }
 }
 
+.form-grid-compact {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.form-grid-button-wrap {
+  display: flex;
+  align-items: flex-end;
+}
+
+.form-grid-button-wrap .btn-secondary {
+  width: 100%;
+  max-width: 240px;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
 button.primary {
   background-color: #646cff;
   color: white;
+  padding: 0.6rem 1.25rem;
+  font-weight: 500;
 }
 
 button.primary:hover {
   background-color: #535bf2;
 }
 
+.btn-secondary {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-color-scheme: light) {
+  .btn-secondary {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background-color: rgba(0, 0, 0, 0.08);
+  }
+}
+
+.btn-ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+
+@media (prefers-color-scheme: light) {
+  .btn-ghost {
+    color: rgba(0, 0, 0, 0.6);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: inherit;
+  }
+}
+
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.card-token .btn-secondary,
+.card-token .btn-ghost {
+  margin-right: 0.5rem;
+}
+
+.token-saved-msg {
+  display: inline-block;
+  margin-left: 0.75rem;
+  font-size: 0.875rem;
+  color: #22c55e;
+  font-weight: 500;
+}
+
+@media (prefers-color-scheme: light) {
+  .token-saved-msg {
+    color: #16a34a;
+  }
+}
+
+.token-form-block {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: light) {
+  .token-form-block {
+    border-top-color: rgba(0, 0, 0, 0.1);
+  }
+}
+
+.token-form-block label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.token-form-block .input-full {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #555;
+  font-size: 0.9375rem;
+}
+
+.token-form-block .input-full:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+  .token-form-block .input-full {
+    border-color: #ccc;
+  }
+}
+
+.token-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expiries-note {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+.expiries-note .expiries-error {
+  color: #ff6b6b;
+}
+
+.expiries-note .expiries-message {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+@media (prefers-color-scheme: light) {
+  .expiries-note .expiries-message {
+    color: rgba(0, 0, 0, 0.5);
+  }
 }
 
 .error {
@@ -234,8 +419,12 @@ tbody tr:hover {
 
 .save-run-btn {
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+}
+
+.save-run-btn.btn-secondary {
+  margin-right: 0.5rem;
 }
 
 .combined-results-section {
