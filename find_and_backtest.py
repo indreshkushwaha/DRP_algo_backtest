@@ -36,6 +36,9 @@ SHORT_PAIR = True  # True: short CE + hedge CE + short PE + hedge PE at same ent
 PHASE2_TRIGGER_PREMIUM = 68.0  # trigger when short leg close > this; None to disable Phase 2
 PHASE2_TARGET_REENTRY = 50.0   # target premium when re-entering the other pair
 PHASE2_STRIKE_RANGE = 15       # ATM ± this many strike_gap steps for multi-strike pre-fetch
+# Phase 2b: when short leg > this trigger (after Phase 2), re-enter other pair at target; None to disable
+PHASE2B_TRIGGER_PREMIUM = 75.0  # trigger when short leg close > this; re-entry at PHASE2B_TARGET_REENTRY
+PHASE2B_TARGET_REENTRY = 50.0   # target premium when re-entering under Phase 2b
 # Phase 3: when short leg > this trigger, re-enter other pair at Phase 3 target (higher tier than Phase 2)
 PHASE3_TRIGGER_PREMIUM = 98.0  # trigger when short leg close > this; use Phase 3 re-entry target; None to disable
 PHASE3_TARGET_REENTRY = 45.0    # target premium when re-entering under Phase 3
@@ -347,6 +350,8 @@ def run(
     phase2_trigger_premium: float | None = None,
     phase2_target_reentry: float = 300.0,
     phase2_strike_range: int = 15,
+    phase2b_trigger_premium: float | None = 75.0,
+    phase2b_target_reentry: float = 50.0,
     phase3_trigger_premium: float | None = None,
     phase3_target_reentry: float = 55.0,
     phase4_trigger_premium: float | None = None,
@@ -520,6 +525,8 @@ def run(
                     underlying_ltp_series=underlying_ltp_series,
                     strike_gap=strike_gap,
                     strike_range=phase2_strike_range,
+                    phase2b_trigger_premium=phase2b_trigger_premium,
+                    phase2b_target_reentry=phase2b_target_reentry,
                     phase3_trigger_premium=phase3_trigger_premium,
                     phase3_target_reentry=phase3_target_reentry,
                     phase4_trigger_premium=phase4_trigger_premium,
@@ -667,6 +674,8 @@ if __name__ == "__main__":
         phase2_trigger_premium=PHASE2_TRIGGER_PREMIUM,
         phase2_target_reentry=PHASE2_TARGET_REENTRY,
         phase2_strike_range=PHASE2_STRIKE_RANGE,
+        phase2b_trigger_premium=PHASE2B_TRIGGER_PREMIUM,
+        phase2b_target_reentry=PHASE2B_TARGET_REENTRY,
         phase3_trigger_premium=PHASE3_TRIGGER_PREMIUM,
         phase3_target_reentry=PHASE3_TARGET_REENTRY,
         phase4_trigger_premium=PHASE4_TRIGGER_PREMIUM,

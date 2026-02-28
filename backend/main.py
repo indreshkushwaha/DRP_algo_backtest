@@ -98,6 +98,8 @@ class BacktestConfig(BaseModel):
     phase2_trigger_premium: float | None = 68.0
     phase2_target_reentry: float = 50.0
     phase2_strike_range: int = 15
+    phase2b_trigger_premium: float | None = 75.0
+    phase2b_target_reentry: float = 50.0
     phase3_trigger_premium: float | None = 98.0
     phase3_target_reentry: float = 50.0
     phase4_trigger_premium: float | None = 115.0
@@ -213,6 +215,8 @@ def run_backtest(config: BacktestConfig):
             phase2_trigger_premium=config.phase2_trigger_premium,
             phase2_target_reentry=config.phase2_target_reentry,
             phase2_strike_range=config.phase2_strike_range,
+            phase2b_trigger_premium=config.phase2b_trigger_premium,
+            phase2b_target_reentry=config.phase2b_target_reentry,
             phase3_trigger_premium=config.phase3_trigger_premium,
             phase3_target_reentry=config.phase3_target_reentry,
             phase4_trigger_premium=config.phase4_trigger_premium,
