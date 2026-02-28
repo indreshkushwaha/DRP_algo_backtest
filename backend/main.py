@@ -95,18 +95,23 @@ class BacktestConfig(BaseModel):
     hedge_difference: int | None = 300
     square_off_when_short_below: float | None = 145.0
     short_pair: bool = True
-    phase2_trigger_premium: float | None = 68.0
+    # Adj 1
+    phase2_trigger_premium: float | None = 76.0
     phase2_target_reentry: float = 50.0
     phase2_strike_range: int = 15
-    phase2b_trigger_premium: float | None = 75.0
+    # Adj 2
+    phase2b_trigger_premium: float | None = 98.0
     phase2b_target_reentry: float = 50.0
-    phase2c_trigger_premium: float | None = 88.0
+    # Adj 3
+    phase2c_trigger_premium: float | None = 115.0
     phase2c_target_reentry: float = 50.0
-    phase3_trigger_premium: float | None = 98.0
+    # Adj 4
+    phase3_trigger_premium: float | None = 134.0
     phase3_target_reentry: float = 50.0
-    phase4_trigger_premium: float | None = 115.0
+    # Adj 5
+    phase4_trigger_premium: float | None = 150.0
     phase4_target_reentry: float = 50.0
-    stoploss_amount: float | None = 5000.0
+    stoploss_amount: float | None = 3000.0
     margin: float | None = None
     profit_pct: float | None = None
     lot_size: int | None = None

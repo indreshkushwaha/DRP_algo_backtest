@@ -406,7 +406,7 @@ function App() {
             </select>
           </label>
           <label>Entry time <input type="time" value={config.entry_time ?? '13:15'} onChange={(e) => updateConfig('entry_time', e.target.value)} /></label>
-          <label>Target premium <input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
+          <label>First Entry<input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
           <label>Expiry date
             <select
               value={expiries.length && expiries.includes(config.expiry_date) ? config.expiry_date : ''}
@@ -423,15 +423,15 @@ function App() {
             <input readOnly value={config.underlying_key} />
           </label>
           <label>Hedge difference <input type="number" value={config.hedge_difference ?? ''} onChange={(e) => updateConfig('hedge_difference', e.target.value)} placeholder="or empty" /></label>
-          <label>Phase2 trigger premium <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Phase2 target reentry <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} /></label>
-          <label>Phase2b trigger premium <input type="number" step="0.1" value={config.phase2b_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2b_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Phase2b target reentry <input type="number" step="0.1" value={config.phase2b_target_reentry} onChange={(e) => updateConfig('phase2b_target_reentry', e.target.value)} /></label>
-          <label>Phase2c trigger premium <input type="number" step="0.1" value={config.phase2c_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2c_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Phase2c target reentry <input type="number" step="0.1" value={config.phase2c_target_reentry} onChange={(e) => updateConfig('phase2c_target_reentry', e.target.value)} /></label>
-          <label>Phase3 trigger premium <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Phase3 target reentry <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} /></label>
-          <label>Phase4 trigger premium <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" /></label>
+          <label>Adjustment 1 <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" /></label>
+          <label>Adjustment 1 reentry <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} /></label>
+          <label>Adjustment 2<input type="number" step="0.1" value={config.phase2b_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2b_trigger_premium', e.target.value)} placeholder="or empty" /></label>
+          <label>Adjustment 2 reentry <input type="number" step="0.1" value={config.phase2b_target_reentry} onChange={(e) => updateConfig('phase2b_target_reentry', e.target.value)} /></label>
+          <label>Adjustment 3 premium <input type="number" step="0.1" value={config.phase2c_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2c_trigger_premium', e.target.value)} placeholder="or empty" /></label>
+          <label>Adjustment 3 reentry <input type="number" step="0.1" value={config.phase2c_target_reentry} onChange={(e) => updateConfig('phase2c_target_reentry', e.target.value)} /></label>
+          <label>Adjustment 4 premium <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" /></label>
+          <label>Adjustment 4 reentry <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} /></label>
+          <label>Adjustment 5 CLose Pos <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Stoploss amount <input type="number" value={config.stoploss_amount ?? ''} onChange={(e) => updateConfig('stoploss_amount', e.target.value)} placeholder="or empty" /></label>
           <label>Margin <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 100000" /></label>
           <label>Profit % <input type="number" step="0.1" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 10" /></label>
