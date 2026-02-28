@@ -228,6 +228,8 @@ def run_weekly_backtest_phase2(
     strike_range: int = 15,
     phase2b_trigger_premium: float | None = None,
     phase2b_target_reentry: float = 50.0,
+    phase2c_trigger_premium: float | None = None,
+    phase2c_target_reentry: float = 50.0,
     phase3_trigger_premium: float | None = None,
     phase3_target_reentry: float = 55.0,
     phase4_trigger_premium: float | None = None,
@@ -275,10 +277,12 @@ def run_weekly_backtest_phase2(
     pe_short_filled = filled_series(pe_short_candles)
     pe_hedge_filled = filled_series(pe_hedge_candles)
 
-    # Phase config: list of (trigger, target) for phases 2, 2b, 3 (Phase 4 is square-off, no re-entry)
+    # Phase config: list of (trigger, target) for phases 2, 2b, 2c, 3 (Phase 4 is square-off, no re-entry)
     phase_config = [(trigger_premium, target_reentry_premium)]
     if phase2b_trigger_premium is not None:
         phase_config.append((phase2b_trigger_premium, phase2b_target_reentry))
+    if phase2c_trigger_premium is not None:
+        phase_config.append((phase2c_trigger_premium, phase2c_target_reentry))
     if phase3_trigger_premium is not None:
         phase_config.append((phase3_trigger_premium, phase3_target_reentry))
 

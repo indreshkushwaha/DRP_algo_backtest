@@ -69,6 +69,8 @@ const defaultConfig = {
   phase2_strike_range: 15,
   phase2b_trigger_premium: 75,
   phase2b_target_reentry: 50,
+  phase2c_trigger_premium: 88,
+  phase2c_target_reentry: 50,
   phase3_trigger_premium: 98,
   phase3_target_reentry: 50,
   phase4_trigger_premium: 115,
@@ -226,6 +228,7 @@ function App() {
       square_off_when_short_below: config.square_off_when_short_below === '' ? null : Number(config.square_off_when_short_below),
       phase2_trigger_premium: config.phase2_trigger_premium === '' ? null : Number(config.phase2_trigger_premium),
       phase2b_trigger_premium: config.phase2b_trigger_premium === '' ? null : Number(config.phase2b_trigger_premium),
+      phase2c_trigger_premium: config.phase2c_trigger_premium === '' ? null : Number(config.phase2c_trigger_premium),
       phase3_trigger_premium: config.phase3_trigger_premium === '' ? null : Number(config.phase3_trigger_premium),
       phase4_trigger_premium: config.phase4_trigger_premium === '' ? null : Number(config.phase4_trigger_premium),
       stoploss_amount: config.stoploss_amount === '' ? null : Number(config.stoploss_amount),
@@ -424,6 +427,8 @@ function App() {
           <label>Phase2 target reentry <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} /></label>
           <label>Phase2b trigger premium <input type="number" step="0.1" value={config.phase2b_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2b_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Phase2b target reentry <input type="number" step="0.1" value={config.phase2b_target_reentry} onChange={(e) => updateConfig('phase2b_target_reentry', e.target.value)} /></label>
+          <label>Phase2c trigger premium <input type="number" step="0.1" value={config.phase2c_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2c_trigger_premium', e.target.value)} placeholder="or empty" /></label>
+          <label>Phase2c target reentry <input type="number" step="0.1" value={config.phase2c_target_reentry} onChange={(e) => updateConfig('phase2c_target_reentry', e.target.value)} /></label>
           <label>Phase3 trigger premium <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Phase3 target reentry <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} /></label>
           <label>Phase4 trigger premium <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" /></label>
