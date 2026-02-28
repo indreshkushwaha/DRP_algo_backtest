@@ -88,6 +88,7 @@ class BacktestConfig(BaseModel):
     entry_datetime: str = "2025-07-25 14:50:00"
     target_premium: float = 50.0
     expiry_date: str = "2025-07-29"
+    exit_datetime: str | None = None
     underlying_key: str = "BSE_INDEX|SENSEX"
     option_type: str = "CE"
     strike_gap: int = 100
@@ -211,6 +212,7 @@ def run_backtest(config: BacktestConfig):
             entry_datetime=config.entry_datetime,
             target_premium=config.target_premium,
             expiry_date=config.expiry_date,
+            exit_datetime=config.exit_datetime,
             underlying_key=config.underlying_key,
             option_type=config.option_type,
             strike_gap=config.strike_gap,

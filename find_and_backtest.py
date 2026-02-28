@@ -342,8 +342,9 @@ def run(
     entry_datetime: str,
     target_premium: float,
     expiry_date: str,
-    underlying_key: str,
-    option_type: str,
+    exit_datetime: str | None = None,
+    underlying_key: str = "",
+    option_type: str = "",
     strike_gap: int = 100,
     tolerance: float = 50.0,
     hedge_difference: int | None = None,
@@ -459,11 +460,11 @@ def run(
             for leg in instruments:
                 leg["lot_size"] = lot_size
 
-        expiry_datetime = f"{expiry_date} 15:30:00"
+        effective_end = exit_datetime if exit_datetime else f"{expiry_date} 15:30:00"
         if phase2_trigger_premium is not None and len(instruments) == 4 and hedge_difference:
             # Phase 2: pre-fetch multi-strike candles and run stateful backtest with re-entry
             entry_dt = pd.to_datetime(entry_datetime)
-            expiry_dt = pd.to_datetime(expiry_datetime)
+            expiry_dt = pd.to_datetime(effective_end)
             print("Phase 2: fetching underlying LTP series...")
             underlying_ltp_series = _fetch_underlying_ltp_series(
                 underlying_key=underlying_key,
@@ -502,7 +503,7 @@ def run(
                 result_df = main.run_weekly_backtest(
                     instruments=instruments,
                     entry_datetime=entry_datetime,
-                    expiry_datetime=expiry_datetime,
+                    expiry_datetime=effective_end,
                     square_off_short_below=None,
                 )
             else:
@@ -513,7 +514,7 @@ def run(
                     pe_hedge_lots = {s: lot_size for s in pe_hedge_lots}
                 result_df = main.run_weekly_backtest_phase2(
                     entry_datetime=entry_datetime,
-                    expiry_datetime=expiry_datetime,
+                    expiry_datetime=effective_end,
                     initial_ce_short_strike=strike_ce,
                     initial_pe_short_strike=strike_pe,
                     trigger_premium=phase2_trigger_premium,
@@ -546,7 +547,7 @@ def run(
             result_df = main.run_weekly_backtest(
                 instruments=instruments,
                 entry_datetime=entry_datetime,
-                expiry_datetime=expiry_datetime,
+                expiry_datetime=effective_end,
                 square_off_short_below=None,
             )
     else:
@@ -593,11 +594,11 @@ def run(
             for leg in instruments:
                 leg["lot_size"] = lot_size
 
-        expiry_datetime = f"{expiry_date} 15:30:00"
+        effective_end = exit_datetime if exit_datetime else f"{expiry_date} 15:30:00"
         result_df = main.run_weekly_backtest(
             instruments=instruments,
             entry_datetime=entry_datetime,
-            expiry_datetime=expiry_datetime,
+            expiry_datetime=effective_end,
             square_off_short_below=square_off_short_below,
         )
 

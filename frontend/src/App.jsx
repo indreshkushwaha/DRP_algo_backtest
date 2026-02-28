@@ -33,6 +33,22 @@ function computeEntryDatetime(expiryDate, entryDay, entryTime) {
   return `${Y}-${M}-${D} ${hh}:${mm || '00'}:00`
 }
 
+function computeExitDatetime(expiryDate, exitDay, exitTime) {
+  const [y, m, d] = expiryDate.split('-').map(Number)
+  const expiry = new Date(y, m - 1, d)
+  const weekday = (expiry.getDay() + 6) % 7
+  const monday = new Date(expiry)
+  monday.setDate(expiry.getDate() - weekday)
+  const exitDate = new Date(monday)
+  exitDate.setDate(monday.getDate() + exitDay)
+  const Y = exitDate.getFullYear()
+  const M = String(exitDate.getMonth() + 1).padStart(2, '0')
+  const D = String(exitDate.getDate()).padStart(2, '0')
+  const timePart = exitTime.includes(':') ? exitTime : `${exitTime}:00`
+  const [hh, mm] = timePart.split(':')
+  return `${Y}-${M}-${D} ${hh}:${mm || '00'}:00`
+}
+
 function formatDateTime(str) {
   if (str == null || str === '') return ''
   const s = String(str).trim()
@@ -55,6 +71,8 @@ function defaultExpiryToDate() {
 const defaultConfig = {
   entry_day: 0,
   entry_time: '13:15',
+  exit_day: 3,
+  exit_time: '15:30',
   target_premium: 50,
   expiry_date: '2025-07-29',
   underlying_key: 'BSE_INDEX|SENSEX',
@@ -223,6 +241,11 @@ function App() {
         config.expiry_date,
         config.entry_day ?? 0,
         config.entry_time ?? '13:15',
+      ),
+      exit_datetime: computeExitDatetime(
+        config.expiry_date,
+        config.exit_day ?? 3,
+        config.exit_time ?? '15:30',
       ),
       hedge_difference: config.hedge_difference === '' ? null : Number(config.hedge_difference),
       square_off_when_short_below: config.square_off_when_short_below === '' ? null : Number(config.square_off_when_short_below),
@@ -406,7 +429,19 @@ function App() {
             </select>
           </label>
           <label>Entry time <input type="time" value={config.entry_time ?? '13:15'} onChange={(e) => updateConfig('entry_time', e.target.value)} /></label>
-          <label>First Entry<input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
+          
+          <br/>
+        
+          
+          <label>Exit day
+            <select value={config.exit_day ?? 3} onChange={(e) => updateConfig('exit_day', Number(e.target.value))}>
+              {DAYS.map((day, i) => (
+                <option key={day} value={i}>{day}</option>
+              ))}
+            </select>
+          </label>
+          <label>Exit time <input type="time" value={config.exit_time ?? '15:30'} onChange={(e) => updateConfig('exit_time', e.target.value)} /></label>
+          <br/>
           <label>Expiry date
             <select
               value={expiries.length && expiries.includes(config.expiry_date) ? config.expiry_date : ''}
@@ -422,7 +457,14 @@ function App() {
           <label>Underlying key
             <input readOnly value={config.underlying_key} />
           </label>
+          <br/>
+          <br/>
+          <label>First Entry<input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
+
           <label>Hedge difference <input type="number" value={config.hedge_difference ?? ''} onChange={(e) => updateConfig('hedge_difference', e.target.value)} placeholder="or empty" /></label>
+          <br/>
+          <br/>
+          
           <label>Adjustment 1 <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" /></label>
           <label>Adjustment 1 reentry <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} /></label>
           
