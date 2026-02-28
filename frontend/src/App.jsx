@@ -71,8 +71,8 @@ function defaultExpiryToDate() {
 const defaultConfig = {
   entry_day: 0,
   entry_time: '13:15',
-  exit_day: 3,
-  exit_time: '15:30',
+  exit_day: 2,
+  exit_time: '14:10',
   target_premium: 50,
   expiry_date: '2025-07-29',
   underlying_key: 'BSE_INDEX|SENSEX',
@@ -244,8 +244,8 @@ function App() {
       ),
       exit_datetime: computeExitDatetime(
         config.expiry_date,
-        config.exit_day ?? 3,
-        config.exit_time ?? '15:30',
+        config.exit_day ?? 2,
+        config.exit_time ?? '14:10',
       ),
       hedge_difference: config.hedge_difference === '' ? null : Number(config.hedge_difference),
       square_off_when_short_below: config.square_off_when_short_below === '' ? null : Number(config.square_off_when_short_below),
@@ -434,13 +434,13 @@ function App() {
         
           
           <label>Exit day
-            <select value={config.exit_day ?? 3} onChange={(e) => updateConfig('exit_day', Number(e.target.value))}>
+            <select value={config.exit_day ?? 2} onChange={(e) => updateConfig('exit_day', Number(e.target.value))}>
               {DAYS.map((day, i) => (
                 <option key={day} value={i}>{day}</option>
               ))}
             </select>
           </label>
-          <label>Exit time <input type="time" value={config.exit_time ?? '15:30'} onChange={(e) => updateConfig('exit_time', e.target.value)} /></label>
+          <label>Exit time <input type="time" value={config.exit_time ?? '14:10'} onChange={(e) => updateConfig('exit_time', e.target.value)} /></label>
           <br/>
           <label>Expiry date
             <select
