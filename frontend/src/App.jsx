@@ -94,7 +94,7 @@ const defaultConfig = {
   phase4_trigger_premium: 115,
   phase4_target_reentry: 50,
   stoploss_amount: 5000,
-  margin: '',
+  margin: 100000,
   profit_pct: '',
   lot_size: 1,
 }
@@ -147,7 +147,13 @@ function App() {
   useEffect(() => {
     fetch(`${API_BASE}/api/config/defaults`)
       .then((r) => r.json())
-      .then((d) => setConfig((c) => ({ ...c, ...d })))
+      .then((d) =>
+        setConfig((c) => ({
+          ...c,
+          ...d,
+          margin: d?.margin ?? c.margin ?? 100000,
+        })),
+      )
       .catch(() => {})
     fetch(`${API_BASE}/api/config/token`)
       .then((r) => r.json())
@@ -546,9 +552,23 @@ function App() {
             const marginNum = config.margin !== '' && config.margin != null ? Number(config.margin) : null
             const profitPctNum = config.profit_pct !== '' && config.profit_pct != null ? Number(config.profit_pct) : null
             const profitTarget = marginNum != null && profitPctNum != null && marginNum > 0 ? marginNum * (profitPctNum / 100) : null
-            const chartHeight = 400
+            const chartHeight = 420
+            const phaseTransitions = chartData
+              .map((row, i) => {
+                if (i === 0) return null
+                const prev = chartData[i - 1]
+                const changed =
+                  (row.phase_ce != null && prev.phase_ce != null && row.phase_ce !== prev.phase_ce) ||
+                  (row.phase_pe != null && prev.phase_pe != null && row.phase_pe !== prev.phase_pe)
+                if (!changed) return null
+                return {
+                  timestamp: row.timestamp,
+                  label: `CE:${row.phase_ce ?? '—'} PE:${row.phase_pe ?? '—'}`,
+                }
+              })
+              .filter(Boolean)
             return (
-              <div className="graph-full-width" style={{ height: chartHeight, minHeight: chartHeight, marginBottom: 16, position: 'relative' }}>
+              <div className="graph-full-width" style={{ height: chartHeight, minHeight: chartHeight, marginBottom: 12, position: 'relative' }}>
                 <div className="chart-y-label" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%) rotate(-90deg)', whiteSpace: 'nowrap', fontSize: '0.875rem', color: 'var(--chart-text, #666)', zIndex: 1 }}>
                   PnL (₹)
                 </div>
@@ -561,12 +581,33 @@ function App() {
                     </YAxis>
                     <Tooltip
                       labelFormatter={(v) => formatDateTime(v)}
-                      formatter={(value, name) => [`₹${Number(value).toFixed(2)}`, name ?? 'PnL']}
+                      formatter={(value, name, item) => {
+                        const n = Number(value)
+                        if (!Number.isFinite(n)) return [String(value ?? ''), name ?? '']
+                        if (name === 'Total PnL') {
+                          const ret = marginNum != null && marginNum > 0 ? (n / marginNum) * 100 : null
+                          const retLabel = ret != null ? ` (${ret.toFixed(2)}%)` : ''
+                          const phaseCe = item?.payload?.phase_ce ?? '—'
+                          const phasePe = item?.payload?.phase_pe ?? '—'
+                          return [`₹${n.toFixed(2)}${retLabel} | CE:${phaseCe} PE:${phasePe}`, name]
+                        }
+                        return [`₹${n.toFixed(2)}`, name ?? 'PnL']
+                      }}
                     />
                     <Legend />
                     {profitTarget != null && (
                       <ReferenceLine y={profitTarget} stroke="black" label={{ value: 'Profit amount', position: 'right' }} />
                     )}
+                    {/* Vertical divider lines at phase changes */}
+                    {phaseTransitions.map((t, i) => (
+                      <ReferenceLine
+                        key={`${t.timestamp}-${i}`}
+                        x={t.timestamp}
+                        stroke="#64748b"
+                        strokeDasharray="4 4"
+                        label={{ value: t.label, position: 'insideTopRight' }}
+                      />
+                    ))}
                     <Line type="monotone" dataKey="total_pnl" name="Total PnL" stroke="var(--primary-color, #2563eb)" strokeWidth={4} dot={false} />
                     {hasNetLegs && (
                       <>

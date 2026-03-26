@@ -8,3 +8,5 @@ __pycache__/
 .venv/
 .~lock*
 backtest_results_fixed.xlsx
+
+.env
