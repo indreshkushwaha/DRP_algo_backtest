@@ -490,7 +490,7 @@ function App() {
           <label>Margin <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 100000" /></label>
           <label>Profit % <input type="number" step="0.1" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 10" /></label>
           <label>Profit amount (₹) <input type="number" readOnly value={(() => { const m = config.margin !== '' && config.margin != null ? Number(config.margin) : null; const p = config.profit_pct !== '' && config.profit_pct != null ? Number(config.profit_pct) : null; return (m != null && p != null && m > 0 && !Number.isNaN(m) && !Number.isNaN(p)) ? (m * p / 100) : ''; })()} placeholder="margin × profit %" /></label>
-          <label>Lot size <input type="number" min={1} value={config.lot_size ?? ''} onChange={(e) => updateConfig('lot_size', e.target.value)} placeholder="override instrument lot" /></label>
+          <label>Qty <input type="number" min={1} value={config.lot_size ?? ''} onChange={(e) => updateConfig('lot_size', e.target.value)} placeholder="qty" /></label>
         </div>
         <button
           onClick={runBacktest}

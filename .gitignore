@@ -1,10 +1,43 @@
+# Environment and secrets
 .env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
-*.pyc
-/venv
-/vevnv
-/packages
-/.venv_run
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
 .venv/
+/.venv_run
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+
+# Legacy / local paths (keep if you still use them)
+/packages
+
+# Node (if tools run at repo root)
+node_modules/
+
+# Generated spreadsheets (see main.py, find_and_backtest.py, get_instrument.py)
+backtest_results*.xlsx
+sensex_expired_options*.xlsx
+
+# LibreOffice locks
 .~lock*
-backtest_results_fixed.xlsx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
