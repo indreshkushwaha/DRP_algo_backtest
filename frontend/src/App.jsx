@@ -94,8 +94,8 @@ const defaultConfig = {
   phase4_trigger_premium: 115,
   phase4_target_reentry: 50,
   stoploss_amount: 5000,
-  margin: '',
-  profit_pct: '',
+  margin: '100000',
+  profit_pct: '0.75',
   lot_size: 1,
 }
 
@@ -488,7 +488,7 @@ function App() {
           
           <label>Stoploss amount <input type="number" value={config.stoploss_amount ?? ''} onChange={(e) => updateConfig('stoploss_amount', e.target.value)} placeholder="or empty" /></label>
           <label>Margin <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 100000" /></label>
-          <label>Profit % <input type="number" step="0.1" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 10" /></label>
+          <label>Profit % <input type="number" step="0.01" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 0.75" /></label>
           <label>Profit amount (₹) <input type="number" readOnly value={(() => { const m = config.margin !== '' && config.margin != null ? Number(config.margin) : null; const p = config.profit_pct !== '' && config.profit_pct != null ? Number(config.profit_pct) : null; return (m != null && p != null && m > 0 && !Number.isNaN(m) && !Number.isNaN(p)) ? (m * p / 100) : ''; })()} placeholder="margin × profit %" /></label>
           <label>Qty <input type="number" min={1} value={config.lot_size ?? ''} onChange={(e) => updateConfig('lot_size', e.target.value)} placeholder="qty" /></label>
         </div>
