@@ -147,7 +147,15 @@ function App() {
   useEffect(() => {
     fetch(`${API_BASE}/api/config/defaults`)
       .then((r) => r.json())
-      .then((d) => setConfig((c) => ({ ...c, ...d })))
+      .then((d) =>
+        setConfig((c) => {
+          const next = { ...c }
+          for (const [key, val] of Object.entries(d)) {
+            if (val != null) next[key] = val
+          }
+          return next
+        }),
+      )
       .catch(() => {})
     fetch(`${API_BASE}/api/config/token`)
       .then((r) => r.json())

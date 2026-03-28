@@ -113,8 +113,8 @@ class BacktestConfig(BaseModel):
     phase4_trigger_premium: float | None = 150.0
     phase4_target_reentry: float = 50.0
     stoploss_amount: float | None = 3000.0
-    margin: float | None = None
-    profit_pct: float | None = None
+    margin: float | None = 100000.0
+    profit_pct: float | None = 0.75
     lot_size: int | None = None
 
 
