@@ -58,6 +58,25 @@ function formatDateTime(str) {
   return dot >= 0 ? withoutT.slice(0, dot) : withoutT
 }
 
+const DEFAULT_MARGIN_FOR_PCT = 100000
+
+/** Margin used for % on PnL: positive finite number, else default 100000. */
+function effectiveMarginForPct(value) {
+  if (value === '' || value == null) return DEFAULT_MARGIN_FOR_PCT
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_MARGIN_FOR_PCT
+  return n
+}
+
+function extraPctOnMargin(finalPnl, marginField) {
+  const m = effectiveMarginForPct(marginField)
+  return (Number(finalPnl) / m) * 100
+}
+
+function formatExtraPct(finalPnl, marginField) {
+  return `${extraPctOnMargin(finalPnl, marginField).toFixed(2)}%`
+}
+
 function defaultExpiryFromDate() {
   const d = new Date()
   d.setMonth(d.getMonth() - 6)
@@ -304,6 +323,7 @@ function App() {
       summary: { ...summary },
       data: [...data],
       columns: [...columns],
+      margin: config.margin === '' ? null : Number(config.margin),
       savedAt: new Date().toISOString(),
     }
     const current = loadSavedRuns()
@@ -330,6 +350,11 @@ function App() {
           )
           const starts = selectedRuns.map((r) => r.summary.start_datetime || '')
           const ends = selectedRuns.map((r) => r.summary.end_datetime || '')
+          const extras = selectedRuns.map((r) =>
+            extraPctOnMargin(r.summary.final_pnl, r.margin),
+          )
+          const extra_avg =
+            extras.length > 0 ? extras.reduce((a, x) => a + x, 0) / extras.length : 0
           return {
             final_pnl: sumFinalPnl,
             num_bars: sumBars,
@@ -339,6 +364,7 @@ function App() {
             max_profit_datetime: maxProfitRun.summary.max_profit_datetime,
             start_datetime: starts.length ? starts.reduce((a, b) => (a <= b ? a : b)) : '',
             end_datetime: ends.length ? ends.reduce((a, b) => (a >= b ? a : b)) : '',
+            extra_avg,
           }
         })()
       : null
@@ -526,6 +552,8 @@ function App() {
                 <dd>₹{Number(summary.max_profit_amount).toFixed(2)} at {formatDateTime(summary.max_profit_datetime)}</dd>
                 <dt>Final PnL</dt>
                 <dd>₹{Number(summary.final_pnl).toFixed(2)}</dd>
+                <dt>Extra</dt>
+                <dd>{formatExtraPct(summary.final_pnl, config.margin)}</dd>
                 <dt>Start</dt>
                 <dd>{formatDateTime(summary.start_datetime)}</dd>
                 <dt>End</dt>
@@ -569,7 +597,15 @@ function App() {
                     </YAxis>
                     <Tooltip
                       labelFormatter={(v) => formatDateTime(v)}
-                      formatter={(value, name) => [`₹${Number(value).toFixed(2)}`, name ?? 'PnL']}
+                      formatter={(value, name) => {
+                        const n = Number(value)
+                        const rupee = `₹${Number.isFinite(n) ? n.toFixed(2) : String(value)}`
+                        const withPct =
+                          Number.isFinite(n)
+                            ? `${rupee} (${formatExtraPct(n, config.margin)})`
+                            : rupee
+                        return [withPct, name ?? 'PnL']
+                      }}
                     />
                     <Legend />
                     {profitTarget != null && (
@@ -662,6 +698,8 @@ function App() {
                   <dd>₹{Number(combinedSummary.max_profit_amount).toFixed(2)} at {formatDateTime(combinedSummary.max_profit_datetime)}</dd>
                   <dt>Final PnL</dt>
                   <dd>₹{Number(combinedSummary.final_pnl).toFixed(2)}</dd>
+                  <dt>Extra (avg)</dt>
+                  <dd>{Number(combinedSummary.extra_avg).toFixed(2)}%</dd>
                   <dt>Start</dt>
                   <dd>{formatDateTime(combinedSummary.start_datetime)}</dd>
                   <dt>End</dt>
@@ -676,6 +714,7 @@ function App() {
                     <tr>
                       <th>Expiry</th>
                       <th>Final PnL</th>
+                      <th>Extra</th>
                       <th>Max drawdown</th>
                       <th>Max profit</th>
                       <th>Bars</th>
@@ -688,6 +727,7 @@ function App() {
                       <tr key={`${r.underlying_key}-${r.expiry_date}`}>
                         <td>{r.expiry_date}</td>
                         <td>₹{Number(r.summary.final_pnl).toFixed(2)}</td>
+                        <td>{formatExtraPct(r.summary.final_pnl, r.margin)}</td>
                         <td>₹{Number(r.summary.max_drawdown_amount).toFixed(2)} at {formatDateTime(r.summary.max_drawdown_datetime)}</td>
                         <td>₹{Number(r.summary.max_profit_amount).toFixed(2)} at {formatDateTime(r.summary.max_profit_datetime)}</td>
                         <td>{r.summary.num_bars}</td>
