@@ -4,36 +4,24 @@ Run from repo root: uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 """
 import importlib
 import os
-import sys
 import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-# Ensure repo root is on path so we can import find_and_backtest and main
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TOKEN_CONFIG_PATH = REPO_ROOT / "token_config.py"
-RELOAD_TRIGGER_PATH = REPO_ROOT / "backend" / "reload_trigger.py"
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+BACKEND_ROOT = Path(__file__).resolve().parent
+TOKEN_CONFIG_PATH = BACKEND_ROOT / "token_config.py"
+RELOAD_TRIGGER_PATH = BACKEND_ROOT / "reload_trigger.py"
+
+load_dotenv(REPO_ROOT / ".env")
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# Create token_config.py if missing so import works
-if not TOKEN_CONFIG_PATH.exists():
-    TOKEN_CONFIG_PATH.write_text(
-        '# Upstox access token - can be updated from the frontend via API.\nUPSTOX_ACCESS_TOKEN = ""\n',
-        encoding="utf-8",
-    )
-# Load token_config so we can read/write and reload it
-try:
-    import token_config
-except Exception:
-    token_config = None
+from . import get_token  # noqa: F401 — ensures backend/token_config.py exists
+from . import token_config
 
 app = FastAPI(title="Upstox Backtest API")
 app.add_middleware(
@@ -48,7 +36,7 @@ app.add_middleware(
 
 def _read_token() -> str:
     """Read token from token_config.py only."""
-    if token_config is not None and hasattr(token_config, "UPSTOX_ACCESS_TOKEN"):
+    if hasattr(token_config, "UPSTOX_ACCESS_TOKEN"):
         return (token_config.UPSTOX_ACCESS_TOKEN or "").strip()
     return ""
 
@@ -75,8 +63,7 @@ def _write_token(token: str) -> None:
     escaped = repr(token)
     content = f"# Upstox access token - can be updated from the frontend via API.\n# Do not commit this file with a real token (see .gitignore).\nUPSTOX_ACCESS_TOKEN = {escaped}\n"
     TOKEN_CONFIG_PATH.write_text(content, encoding="utf-8")
-    if token_config is not None:
-        importlib.reload(token_config)
+    importlib.reload(token_config)
     _trigger_reload()
 
 
@@ -170,7 +157,7 @@ def get_expiries_list(
     to_date: str | None = Query(None, description="Filter expiries on or before (YYYY-MM-DD)"),
 ):
     """Return expiry dates for the underlying. API returns only past expiries (~6 months)."""
-    from get_instrument import get_expiries as fetch_expiries
+    from .get_instrument import get_expiries as fetch_expiries
     token = _read_token()
     if not token:
         return {"expiries": [], "error": "No access token"}
@@ -206,7 +193,8 @@ def get_defaults():
 @app.post("/api/backtest")
 def run_backtest(config: BacktestConfig):
     """Run backtest with given config; return result table as JSON."""
-    import find_and_backtest
+    from . import find_and_backtest
+
     try:
         result_df = find_and_backtest.run(
             entry_datetime=config.entry_datetime,
@@ -219,7 +207,6 @@ def run_backtest(config: BacktestConfig):
             tolerance=config.tolerance,
             hedge_difference=config.hedge_difference,
             square_off_short_below=config.square_off_when_short_below,
-            output_excel=None,
             short_pair=config.short_pair,
             phase2_trigger_premium=config.phase2_trigger_premium,
             phase2_target_reentry=config.phase2_target_reentry,

@@ -3,21 +3,23 @@ Find Instrument to Short and Run Backtest
 =========================================
 Given entry date/time and target premium, fetches underlying LTP (1-min candles),
 finds the option contract whose premium at entry is nearest to target (with strike
-adjustment), and runs the weekly backtest from main.py to produce an Excel result.
+adjustment), and runs the weekly backtest from backtest_engine.
 
 Usage:
-    Update CONFIGURATION below and run: python find_and_backtest.py
+    Update CONFIGURATION below and run: python -m backend.find_and_backtest
 """
 
 import sys
 import urllib.parse
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_REPO_ROOT / ".env")
 
 # -----------------------------------------------------------------------------
 # CONFIGURATION - update these values
@@ -50,8 +52,6 @@ PHASE4_TRIGGER_PREMIUM = 115   # float or None
 PHASE4_TARGET_REENTRY = 65.0    # used when Phase 4 trigger is set and exceeded
 # Stoploss: when total PnL (realized + unrealized) is loss more than this amount, square off all positions; None to disable
 STOPLOSS_AMOUNT = 5000  # e.g. 5000.0
-OUTPUT_EXCEL = "backtest_results_fixed.xlsx"
-
 
 
 BASE_URL = "https://api.upstox.com/v2"
@@ -59,14 +59,15 @@ BASE_URL = "https://api.upstox.com/v2"
 
 def _get_access_token():
     """Read token from token_config.py (single source; can be updated via frontend Settings)."""
-    from get_token import require_access_token
+    from .get_token import require_access_token
+
     return require_access_token()
 
 
 def get_underlying_ltp_at_entry(underlying_key: str, entry_dt: datetime, token: str) -> float:
     """
     Fetch underlying LTP using 1-minute candles. Returns the close of the
-    first candle at or after entry_dt (same rule as main.py).
+    first candle at or after entry_dt (same rule as backtest_engine).
     """
     date_str = entry_dt.strftime("%Y-%m-%d")
     encoded_key = urllib.parse.quote(underlying_key, safe="")
@@ -105,9 +106,9 @@ def get_underlying_ltp_at_entry(underlying_key: str, entry_dt: datetime, token: 
 def get_option_premium_at_entry(instrument_key: str, entry_dt: datetime, token: str) -> float | None:
     """
     Fetch 1-minute candles for the option and return close of first candle at or after entry_dt.
-    Uses same logic as main.py. Returns None if no data.
+    Uses same logic as backtest_engine. Returns None if no data.
     """
-    from main import fetch_candle_data
+    from .backtest_engine import fetch_candle_data
 
     try:
         df = fetch_candle_data(
@@ -143,7 +144,7 @@ def find_instrument_to_short(
     Returns (instrument_key, lot_size, strike, premium_at_entry) or None if not found.
     option_type must be "CE" or "PE".
     """
-    from get_instrument import get_expired_option_contracts
+    from .get_instrument import get_expired_option_contracts
 
     entry_dt = pd.to_datetime(entry_datetime)
     if not token:
@@ -206,7 +207,7 @@ def _resolve_hedge_contract(
     PE hedge (bull put spread):  short_strike - hedge_difference
     Returns None if hedge strike not found.
     """
-    from get_instrument import get_expired_option_contracts
+    from .get_instrument import get_expired_option_contracts
 
     if option_type.upper() == "PE":
         hedge_strike = short_strike - hedge_difference
@@ -280,8 +281,8 @@ def _fetch_multi_strike_candles(
     Pre-fetch candles for short and hedge for strikes in [ATM - strike_range*strike_gap, ATM + strike_range*strike_gap].
     Returns (short_candles, hedge_candles, short_lots, hedge_lots) each keyed by short_strike.
     """
-    from get_instrument import get_expired_option_contracts
-    from main import fetch_candle_data
+    from .backtest_engine import fetch_candle_data
+    from .get_instrument import get_expired_option_contracts
 
     contracts_df = get_expired_option_contracts(underlying_key, expiry_date, access_token=token)
     filtered = contracts_df[contracts_df["instrument_type"].str.upper() == option_type.upper()]
@@ -349,7 +350,6 @@ def run(
     tolerance: float = 50.0,
     hedge_difference: int | None = None,
     square_off_short_below: float | None = None,
-    output_excel: str | None = "backtest_results_fixed.xlsx",
     short_pair: bool = False,
     phase2_trigger_premium: float | None = None,
     phase2_target_reentry: float = 300.0,
@@ -369,22 +369,14 @@ def run(
 ) -> pd.DataFrame | None:
     """
     Find instrument(s) to short and run backtest.
-    If output_excel is a path string, save result to Excel and return None.
-    If output_excel is None, return the result DataFrame (for API use).
+    Returns the result DataFrame, or None if the run could not complete.
     If short_pair is False: single option (option_type CE or PE), optional hedge, optional square_off.
     If short_pair is True: short CE + hedge CE + short PE + hedge PE at same entry/target; no square-off.
     If phase2_trigger_premium is not None (and short_pair and 4 legs): Phase 2 re-entry when short CE/PE > trigger.
     """
-    import main
+    from . import backtest_engine
 
     token = _get_access_token()
-    # #region agent log
-    try:
-        with open("/media/indresh/Common_Storage/Devroad/upstox_algo/.cursor/debug.log", "a") as f:
-            f.write('{"id":"run_token","timestamp":' + str(int(__import__("time").time() * 1000)) + ',"location":"find_and_backtest.py:run","message":"Request-time token","data":{"prefix":"' + (token[:8] if token else "") + '"},"hypothesisId":"H2"}\n')
-    except Exception:
-        pass
-    # #endregion
     instruments: list[dict]
 
     if short_pair:
@@ -500,7 +492,7 @@ def run(
             )
             if strike_ce not in ce_short_candles or strike_pe not in pe_short_candles:
                 print("ERROR: Initial strikes not in Phase 2 strike range. Run without Phase 2 or increase PHASE2_STRIKE_RANGE.")
-                result_df = main.run_weekly_backtest(
+                result_df = backtest_engine.run_weekly_backtest(
                     instruments=instruments,
                     entry_datetime=entry_datetime,
                     expiry_datetime=effective_end,
@@ -512,7 +504,7 @@ def run(
                     ce_hedge_lots = {s: lot_size for s in ce_hedge_lots}
                     pe_short_lots = {s: lot_size for s in pe_short_lots}
                     pe_hedge_lots = {s: lot_size for s in pe_hedge_lots}
-                result_df = main.run_weekly_backtest_phase2(
+                result_df = backtest_engine.run_weekly_backtest_phase2(
                     entry_datetime=entry_datetime,
                     expiry_datetime=effective_end,
                     initial_ce_short_strike=strike_ce,
@@ -544,7 +536,7 @@ def run(
                     profit_pct=profit_pct,
                 )
         else:
-            result_df = main.run_weekly_backtest(
+            result_df = backtest_engine.run_weekly_backtest(
                 instruments=instruments,
                 entry_datetime=entry_datetime,
                 expiry_datetime=effective_end,
@@ -595,7 +587,7 @@ def run(
                 leg["lot_size"] = lot_size
 
         effective_end = exit_datetime if exit_datetime else f"{expiry_date} 15:30:00"
-        result_df = main.run_weekly_backtest(
+        result_df = backtest_engine.run_weekly_backtest(
             instruments=instruments,
             entry_datetime=entry_datetime,
             expiry_datetime=effective_end,
@@ -606,7 +598,7 @@ def run(
         print("Backtest returned no data.")
         return None
 
-    # Rename columns for clearer Excel headers
+    # Rename columns for clearer labels
     if len(instruments) == 2 and not short_pair:
         rename = {}
         for col in result_df.columns:
@@ -659,15 +651,11 @@ def run(
                 rename[col] = "hedge_pe_pnl"
         result_df = result_df.rename(columns=rename)
 
-    if output_excel is not None:
-        result_df.to_excel(output_excel, index=True)
-        print(f"Results saved to {output_excel}")
-        return None
     return result_df
 
 
 if __name__ == "__main__":
-    run(
+    result_df = run(
         entry_datetime=ENTRY_DATETIME,
         target_premium=TARGET_PREMIUM,
         expiry_date=EXPIRY_DATE,
@@ -677,7 +665,6 @@ if __name__ == "__main__":
         tolerance=TOLERANCE,
         hedge_difference=HEDGE_DIFFERENCE,
         square_off_short_below=SQUARE_OFF_WHEN_SHORT_BELOW,
-        output_excel=OUTPUT_EXCEL,
         short_pair=SHORT_PAIR,
         phase2_trigger_premium=PHASE2_TRIGGER_PREMIUM,
         phase2_target_reentry=PHASE2_TARGET_REENTRY,
@@ -692,3 +679,5 @@ if __name__ == "__main__":
         phase4_target_reentry=PHASE4_TARGET_REENTRY,
         stoploss_amount=STOPLOSS_AMOUNT,
     )
+    if result_df is not None:
+        print(result_df.tail())

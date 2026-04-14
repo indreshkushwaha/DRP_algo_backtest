@@ -3,7 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime
 
-from get_token import get_access_token
+from .get_token import get_access_token
 
 BASE_URL = "https://api.upstox.com/v2"
 
@@ -58,7 +58,7 @@ def fetch_candle_data(instrument_key, from_date, to_date, interval="1minute", ac
     
     df["timestamp"] = df["timestamp"].dt.tz_convert("Asia/Kolkata")
     
-    # Remove timezone info for cleaner Excel export, but now in IST
+    # Remove timezone info for cleaner display, but now in IST
     df["timestamp"] = df["timestamp"].dt.tz_localize(None)
 
     df.set_index("timestamp", inplace=True)
@@ -639,5 +639,4 @@ if __name__ == "__main__":
         expiry_datetime="2025-07-29 15:30:00"
     )
 
-    result_df.to_excel("backtest_results_fixed.xlsx")
-    print("Results saved to backtest_results_fixed.xlsx")
+    print(result_df.tail())

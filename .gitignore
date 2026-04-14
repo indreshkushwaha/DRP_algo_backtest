@@ -28,7 +28,7 @@ htmlcov/
 # Node (if tools run at repo root)
 node_modules/
 
-# Generated spreadsheets (see main.py, find_and_backtest.py, get_instrument.py)
+# Generated spreadsheets (see backend/backtest_engine.py, backend/find_and_backtest.py, …)
 backtest_results*.xlsx
 sensex_expired_options*.xlsx
 
