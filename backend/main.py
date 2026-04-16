@@ -158,6 +158,12 @@ class BacktestConfig(BaseModel):
     lot_size: int | None = None
 
 
+@app.get("/api/health")
+def health_check():
+    """Lightweight backend health check for frontend status indicator."""
+    return {"ok": True}
+
+
 @app.get("/api/config/token")
 def get_token():
     """Return current Upstox access token (for editing in frontend)."""

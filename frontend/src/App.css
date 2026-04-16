@@ -1,7 +1,6 @@
 .app {
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+  margin: 0;
   padding: 2rem;
   text-align: left;
   display: flex;
@@ -15,6 +14,42 @@
   font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.backend-health-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.backend-health-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.backend-health-dot.is-healthy {
+  background-color: #22c55e;
+}
+
+.backend-health-dot.is-unhealthy {
+  background-color: #ef4444;
+}
+
+@media (prefers-color-scheme: light) {
+  .backend-health-dot {
+    border-color: rgba(0, 0, 0, 0.35);
+  }
 }
 
 .card {
@@ -110,6 +145,16 @@
 
 .form-grid-compact {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.backtest-config-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.9rem 1.25rem;
+}
+
+.backtest-config-card .form-grid label {
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .form-grid-button-wrap {

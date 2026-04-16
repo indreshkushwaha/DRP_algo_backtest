@@ -153,6 +153,7 @@ function App() {
   const [loadedSavedExpiryDate, setLoadedSavedExpiryDate] = useState('')
   const [showGraph, setShowGraph] = useState(true)
   const [showTokenForm, setShowTokenForm] = useState(false)
+  const [backendHealthy, setBackendHealthy] = useState(false)
   const tokenSavedTimeoutRef = useRef(null)
 
   useEffect(() => {
@@ -182,6 +183,30 @@ function App() {
       .then((r) => r.json())
       .then((d) => setToken(d.access_token || ''))
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    let isActive = true
+    const checkBackendHealth = () => {
+      fetch(`${API_BASE}/api/health`)
+        .then(async (r) => {
+          if (!r.ok) throw new Error('Health check failed')
+          const body = await r.json()
+          if (!isActive) return
+          setBackendHealthy(body?.ok === true)
+        })
+        .catch(() => {
+          if (!isActive) return
+          setBackendHealthy(false)
+        })
+    }
+
+    checkBackendHealth()
+    const intervalId = setInterval(checkBackendHealth, 10000)
+    return () => {
+      isActive = false
+      clearInterval(intervalId)
+    }
   }, [])
 
   const fetchExpiries = () => {
@@ -384,7 +409,16 @@ function App() {
 
   return (
     <div className="app">
-      <h1>Upstox Backtest</h1>
+      <div className="app-header">
+        <h1>Upstox Backtest</h1>
+        <div
+          className="backend-health-indicator"
+          title={`Backend ${backendHealthy ? 'Online' : 'Offline'}`}
+          aria-label={`Backend ${backendHealthy ? 'Online' : 'Offline'}`}
+        >
+          <span className={`backend-health-dot ${backendHealthy ? 'is-healthy' : 'is-unhealthy'}`} />
+        </div>
+      </div>
 
       <section className="card card-token">
         <h2>API</h2>
@@ -457,31 +491,35 @@ function App() {
         )}
       </section>
 
-      <section className="card">
+      <section className="card backtest-config-card">
         <h2>Backtest config</h2>
-        <div className="form-grid">
-          <label>Entry day
+        <div className="form-grid backtest-config-grid">
+          <label>
+            Entry day
             <select value={config.entry_day ?? 0} onChange={(e) => updateConfig('entry_day', Number(e.target.value))}>
               {DAYS.map((day, i) => (
                 <option key={day} value={i}>{day}</option>
               ))}
             </select>
           </label>
-          <label>Entry time <input type="time" value={config.entry_time ?? '13:15'} onChange={(e) => updateConfig('entry_time', e.target.value)} /></label>
-          
-          <br/>
-        
-          
-          <label>Exit day
+          <label>
+            Entry time
+            <input type="time" value={config.entry_time ?? '13:15'} onChange={(e) => updateConfig('entry_time', e.target.value)} />
+          </label>
+          <label>
+            Exit day
             <select value={config.exit_day ?? 2} onChange={(e) => updateConfig('exit_day', Number(e.target.value))}>
               {DAYS.map((day, i) => (
                 <option key={day} value={i}>{day}</option>
               ))}
             </select>
           </label>
-          <label>Exit time <input type="time" value={config.exit_time ?? '14:10'} onChange={(e) => updateConfig('exit_time', e.target.value)} /></label>
-          <br/>
-          <label>Expiry date
+          <label>
+            Exit time
+            <input type="time" value={config.exit_time ?? '14:10'} onChange={(e) => updateConfig('exit_time', e.target.value)} />
+          </label>
+          <label>
+            Expiry date
             <select
               value={expiries.length && expiries.includes(config.expiry_date) ? config.expiry_date : ''}
               onChange={(e) => updateConfig('expiry_date', e.target.value)}
@@ -493,43 +531,74 @@ function App() {
               ))}
             </select>
           </label>
-          <label>Underlying key
+          <label>
+            Underlying key
             <input readOnly value={config.underlying_key} />
           </label>
-          <br/>
-          <br/>
-          <label>First Entry<input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} /></label>
-
-          <label>Hedge difference <input type="number" value={config.hedge_difference ?? ''} onChange={(e) => updateConfig('hedge_difference', e.target.value)} placeholder="or empty" /></label>
-          <br/>
-          <br/>
-          
-          <label>Adjustment 1 <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Adjustment 1 reentry <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} /></label>
-          
-
-          <br />
-          <br />
-          <label>Adjustment 2<input type="number" step="0.1" value={config.phase2b_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2b_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Adjustment 2 re-entry <input type="number" step="0.1" value={config.phase2b_target_reentry} onChange={(e) => updateConfig('phase2b_target_reentry', e.target.value)} /></label>
-          <br />
-          <br />
-          <label>Adjustment 3 <input type="number" step="0.1" value={config.phase2c_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2c_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Adjustment 3 reentry <input type="number" step="0.1" value={config.phase2c_target_reentry} onChange={(e) => updateConfig('phase2c_target_reentry', e.target.value)} /></label>
-          <br />
-          <br />
-          <label>Adjustment 4 <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          <label>Adjustment 4 reentry <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} /></label>
-          <br />
-          <br />
-          <label>Adjustment 5 CLose Pos <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" /></label>
-          
-          
-          <label>Stoploss amount <input type="number" value={config.stoploss_amount ?? ''} onChange={(e) => updateConfig('stoploss_amount', e.target.value)} placeholder="or empty" /></label>
-          <label>Margin <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 100000" /></label>
-          <label>Profit % <input type="number" step="0.01" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 0.75" /></label>
-          <label>Profit amount (₹) <input type="number" readOnly value={(() => { const m = config.margin !== '' && config.margin != null ? Number(config.margin) : null; const p = config.profit_pct !== '' && config.profit_pct != null ? Number(config.profit_pct) : null; return (m != null && p != null && m > 0 && !Number.isNaN(m) && !Number.isNaN(p)) ? (m * p / 100) : ''; })()} placeholder="margin × profit %" /></label>
-          <label>Qty <input type="number" min={1} value={config.lot_size ?? ''} onChange={(e) => updateConfig('lot_size', e.target.value)} placeholder="qty" /></label>
+          <label>
+            First entry premium
+            <input type="number" step="0.1" value={config.target_premium} onChange={(e) => updateConfig('target_premium', e.target.value)} />
+          </label>
+          <label>
+            Hedge difference
+            <input type="number" value={config.hedge_difference ?? ''} onChange={(e) => updateConfig('hedge_difference', e.target.value)} placeholder="or empty" />
+          </label>
+          <label>
+            Adjustment 1 trigger
+            <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" />
+          </label>
+          <label>
+            Adjustment 1 re-entry
+            <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} />
+          </label>
+          <label>
+            Adjustment 2 trigger
+            <input type="number" step="0.1" value={config.phase2b_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2b_trigger_premium', e.target.value)} placeholder="or empty" />
+          </label>
+          <label>
+            Adjustment 2 re-entry
+            <input type="number" step="0.1" value={config.phase2b_target_reentry} onChange={(e) => updateConfig('phase2b_target_reentry', e.target.value)} />
+          </label>
+          <label>
+            Adjustment 3 trigger
+            <input type="number" step="0.1" value={config.phase2c_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2c_trigger_premium', e.target.value)} placeholder="or empty" />
+          </label>
+          <label>
+            Adjustment 3 re-entry
+            <input type="number" step="0.1" value={config.phase2c_target_reentry} onChange={(e) => updateConfig('phase2c_target_reentry', e.target.value)} />
+          </label>
+          <label>
+            Adjustment 4 trigger
+            <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" />
+          </label>
+          <label>
+            Adjustment 4 re-entry
+            <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} />
+          </label>
+          <label>
+            Adjustment 5 close position
+            <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" />
+          </label>
+          <label>
+            Stoploss amount
+            <input type="number" value={config.stoploss_amount ?? ''} onChange={(e) => updateConfig('stoploss_amount', e.target.value)} placeholder="or empty" />
+          </label>
+          <label>
+            Margin
+            <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 100000" />
+          </label>
+          <label>
+            Profit %
+            <input type="number" step="0.01" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 0.75" />
+          </label>
+          <label>
+            Profit amount (₹)
+            <input type="number" readOnly value={(() => { const m = config.margin !== '' && config.margin != null ? Number(config.margin) : null; const p = config.profit_pct !== '' && config.profit_pct != null ? Number(config.profit_pct) : null; return (m != null && p != null && m > 0 && !Number.isNaN(m) && !Number.isNaN(p)) ? (m * p / 100) : ''; })()} placeholder="margin × profit %" />
+          </label>
+          <label>
+            Qty
+            <input type="number" min={1} value={config.lot_size ?? ''} onChange={(e) => updateConfig('lot_size', e.target.value)} placeholder="qty" />
+          </label>
         </div>
         <button
           onClick={runBacktest}
