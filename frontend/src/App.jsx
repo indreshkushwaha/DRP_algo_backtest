@@ -150,6 +150,7 @@ function App() {
   const [expiriesMessage, setExpiriesMessage] = useState('')
   const [savedRuns, setSavedRuns] = useState([])
   const [selectedExpiriesForCombine, setSelectedExpiriesForCombine] = useState([])
+  const [loadedSavedExpiryDate, setLoadedSavedExpiryDate] = useState('')
   const [showGraph, setShowGraph] = useState(true)
   const [showTokenForm, setShowTokenForm] = useState(false)
   const tokenSavedTimeoutRef = useRef(null)
@@ -319,11 +320,10 @@ function App() {
   }
 
   const saveRun = () => {
-    if (!summary || data.length === 0) return
+    if (data.length === 0 || columns.length === 0) return
     const run = {
       underlying_key: config.underlying_key,
       expiry_date: config.expiry_date,
-      summary: { ...summary },
       data: [...data],
       columns: [...columns],
       logs: backtestLogs,
@@ -339,39 +339,22 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   }
 
+  const loadSavedRun = (expiryDate) => {
+    const run = savedRuns.find(
+      (r) => r.underlying_key === config.underlying_key && r.expiry_date === expiryDate,
+    )
+    if (!run) return
+    setData(Array.isArray(run.data) ? run.data : [])
+    setColumns(Array.isArray(run.columns) ? run.columns : [])
+    setBacktestLogs(typeof run.logs === 'string' ? run.logs : '')
+    setSummary(run.summary || null)
+    setShowGraph(true)
+    setLoadedSavedExpiryDate(expiryDate)
+    setConfig((c) => ({ ...c, expiry_date: expiryDate, margin: run.margin ?? c.margin }))
+  }
+
   const runsForUnderlying = savedRuns.filter((r) => r.underlying_key === config.underlying_key)
   const selectedRuns = runsForUnderlying.filter((r) => selectedExpiriesForCombine.includes(r.expiry_date))
-  const combinedSummary =
-    selectedRuns.length > 0
-      ? (() => {
-          const sumFinalPnl = selectedRuns.reduce((a, r) => a + Number(r.summary.final_pnl || 0), 0)
-          const sumBars = selectedRuns.reduce((a, r) => a + Number(r.summary.num_bars || 0), 0)
-          const minDrawdownRun = selectedRuns.reduce((best, r) =>
-            Number(r.summary.max_drawdown_amount ?? 0) < Number(best.summary.max_drawdown_amount ?? 0) ? r : best
-          )
-          const maxProfitRun = selectedRuns.reduce((best, r) =>
-            Number(r.summary.max_profit_amount ?? 0) > Number(best.summary.max_profit_amount ?? 0) ? r : best
-          )
-          const starts = selectedRuns.map((r) => r.summary.start_datetime || '')
-          const ends = selectedRuns.map((r) => r.summary.end_datetime || '')
-          const extras = selectedRuns.map((r) =>
-            extraPctOnMargin(r.summary.final_pnl, r.margin),
-          )
-          const extra_avg =
-            extras.length > 0 ? extras.reduce((a, x) => a + x, 0) / extras.length : 0
-          return {
-            final_pnl: sumFinalPnl,
-            num_bars: sumBars,
-            max_drawdown_amount: minDrawdownRun.summary.max_drawdown_amount,
-            max_drawdown_datetime: minDrawdownRun.summary.max_drawdown_datetime,
-            max_profit_amount: maxProfitRun.summary.max_profit_amount,
-            max_profit_datetime: maxProfitRun.summary.max_profit_datetime,
-            start_datetime: starts.length ? starts.reduce((a, b) => (a <= b ? a : b)) : '',
-            end_datetime: ends.length ? ends.reduce((a, b) => (a >= b ? a : b)) : '',
-            extra_avg,
-          }
-        })()
-      : null
 
   const toggleExpiryForCombine = (expiryDate) => {
     setSelectedExpiriesForCombine((prev) =>
@@ -390,6 +373,7 @@ function App() {
     if (typeof window === 'undefined' || !window.confirm('Clear all saved backtest runs? This cannot be undone.')) return
     setSavedRuns([])
     setSelectedExpiriesForCombine([])
+    setLoadedSavedExpiryDate('')
     localStorage.setItem(STORAGE_KEY, '[]')
   }
 
@@ -555,12 +539,11 @@ function App() {
         <section className="card table-section">
           <h2>Results</h2>
           {summary && Object.keys(summary).length > 0 && (
-            <>
-              <div className="results-summary">
-                <h3>Summary</h3>
-                <dl>
-                  <dt>Max drawdown</dt>
-<dd>₹{Number(summary.max_drawdown_amount).toFixed(2)} at {formatDateTime(summary.max_drawdown_datetime)}</dd>
+            <div className="results-summary">
+              <h3>Summary</h3>
+              <dl>
+                <dt>Max drawdown</dt>
+                <dd>₹{Number(summary.max_drawdown_amount).toFixed(2)} at {formatDateTime(summary.max_drawdown_datetime)}</dd>
                 <dt>Max profit</dt>
                 <dd>₹{Number(summary.max_profit_amount).toFixed(2)} at {formatDateTime(summary.max_profit_datetime)}</dd>
                 <dt>Final PnL</dt>
@@ -571,15 +554,14 @@ function App() {
                 <dd>{formatDateTime(summary.start_datetime)}</dd>
                 <dt>End</dt>
                 <dd>{formatDateTime(summary.end_datetime)}</dd>
-                  <dt>Bars</dt>
-                  <dd>{summary.num_bars}</dd>
-                </dl>
-              </div>
-              <button type="button" onClick={saveRun} className="save-run-btn btn-secondary" style={{ marginBottom: 12 }}>
-                Save run
-              </button>
-            </>
+                <dt>Bars</dt>
+                <dd>{summary.num_bars}</dd>
+              </dl>
+            </div>
           )}
+          <button type="button" onClick={saveRun} className="save-run-btn btn-secondary" style={{ marginBottom: 12 }}>
+            Save run
+          </button>
           <button
             type="button"
             onClick={() => setShowGraph((s) => !s)}
@@ -677,12 +659,12 @@ function App() {
       {runsForUnderlying.length > 0 && (
         <section className="card combined-results-section">
           <div className="combined-results-header">
-            <h2>Combined results</h2>
+            <h2>Saved backtests</h2>
             <button type="button" onClick={clearSavedData} className="clear-saved-btn">
               Clear saved data
             </button>
           </div>
-          <p className="combined-hint">Select one or more saved expiries to see combined summary and per-expiry table.</p>
+          <p className="combined-hint">Click any saved expiry to load its graph and table into Results.</p>
           <div className="combined-expiry-select">
             <button type="button" onClick={selectAllSavedExpiries} className="select-all-expiries-btn">
               {selectedExpiriesForCombine.length === runsForUnderlying.length ? 'Deselect all' : 'Select all'}
@@ -695,57 +677,35 @@ function App() {
                     checked={selectedExpiriesForCombine.includes(r.expiry_date)}
                     onChange={() => toggleExpiryForCombine(r.expiry_date)}
                   />
-                  <span>{r.expiry_date}</span>
+                  <button
+                    type="button"
+                    onClick={() => loadSavedRun(r.expiry_date)}
+                    className="btn-ghost"
+                  >
+                    {r.expiry_date}
+                    {loadedSavedExpiryDate === r.expiry_date ? ' (loaded)' : ''}
+                  </button>
                 </label>
               ))}
             </div>
           </div>
-          {selectedRuns.length > 0 && combinedSummary && (
+          {selectedRuns.length > 0 && (
             <>
-              <div className="results-summary combined-summary">
-                <h3>Combined summary</h3>
-                <dl>
-                  <dt>Max drawdown</dt>
-                  <dd>₹{Number(combinedSummary.max_drawdown_amount).toFixed(2)} at {formatDateTime(combinedSummary.max_drawdown_datetime)}</dd>
-                  <dt>Max profit</dt>
-                  <dd>₹{Number(combinedSummary.max_profit_amount).toFixed(2)} at {formatDateTime(combinedSummary.max_profit_datetime)}</dd>
-                  <dt>Final PnL</dt>
-                  <dd>₹{Number(combinedSummary.final_pnl).toFixed(2)}</dd>
-                  <dt>Extra (avg)</dt>
-                  <dd>{Number(combinedSummary.extra_avg).toFixed(2)}%</dd>
-                  <dt>Start</dt>
-                  <dd>{formatDateTime(combinedSummary.start_datetime)}</dd>
-                  <dt>End</dt>
-                  <dd>{formatDateTime(combinedSummary.end_datetime)}</dd>
-                  <dt>Bars</dt>
-                  <dd>{combinedSummary.num_bars}</dd>
-                </dl>
-              </div>
               <div className="table-wrap combined-expiry-table-wrap">
                 <table className="combined-expiry-table">
                   <thead>
                     <tr>
                       <th>Expiry</th>
-                      <th>Final PnL</th>
-                      <th>Extra</th>
-                      <th>Max drawdown</th>
-                      <th>Max profit</th>
-                      <th>Bars</th>
-                      <th>Start</th>
-                      <th>End</th>
+                      <th>Rows</th>
+                      <th>Saved at</th>
                     </tr>
                   </thead>
                   <tbody>
                     {selectedRuns.map((r) => (
                       <tr key={`${r.underlying_key}-${r.expiry_date}`}>
                         <td>{r.expiry_date}</td>
-                        <td>₹{Number(r.summary.final_pnl).toFixed(2)}</td>
-                        <td>{formatExtraPct(r.summary.final_pnl, r.margin)}</td>
-                        <td>₹{Number(r.summary.max_drawdown_amount).toFixed(2)} at {formatDateTime(r.summary.max_drawdown_datetime)}</td>
-                        <td>₹{Number(r.summary.max_profit_amount).toFixed(2)} at {formatDateTime(r.summary.max_profit_datetime)}</td>
-                        <td>{r.summary.num_bars}</td>
-                        <td>{formatDateTime(r.summary.start_datetime)}</td>
-                        <td>{formatDateTime(r.summary.end_datetime)}</td>
+                        <td>{Array.isArray(r.data) ? r.data.length : 0}</td>
+                        <td>{formatDateTime(r.savedAt)}</td>
                       </tr>
                     ))}
                   </tbody>
