@@ -11,8 +11,10 @@ Install deps: pip install -r backend/requirements.txt (from repo root), or
 pip install -r requirements.txt from backend/ (that file includes ../requirements.txt).
 """
 import importlib
+import io
 import os
 import time
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ROOT = Path(__file__).resolve().parent
 TOKEN_CONFIG_PATH = BACKEND_ROOT / "token_config.py"
 RELOAD_TRIGGER_PATH = BACKEND_ROOT / "reload_trigger.py"
+MAX_BACKTEST_LOG_CHARS = 120_000
 
 load_dotenv(REPO_ROOT / ".env")
 
@@ -203,35 +206,39 @@ def run_backtest(config: BacktestConfig):
     """Run backtest with given config; return result table as JSON."""
     from . import find_and_backtest
 
+    stdout_buffer = io.StringIO()
+    captured_logs = ""
     try:
-        result_df = find_and_backtest.run(
-            entry_datetime=config.entry_datetime,
-            target_premium=config.target_premium,
-            expiry_date=config.expiry_date,
-            exit_datetime=config.exit_datetime,
-            underlying_key=config.underlying_key,
-            option_type=config.option_type,
-            strike_gap=config.strike_gap,
-            tolerance=config.tolerance,
-            hedge_difference=config.hedge_difference,
-            square_off_short_below=config.square_off_when_short_below,
-            short_pair=config.short_pair,
-            phase2_trigger_premium=config.phase2_trigger_premium,
-            phase2_target_reentry=config.phase2_target_reentry,
-            phase2_strike_range=config.phase2_strike_range,
-            phase2b_trigger_premium=config.phase2b_trigger_premium,
-            phase2b_target_reentry=config.phase2b_target_reentry,
-            phase2c_trigger_premium=config.phase2c_trigger_premium,
-            phase2c_target_reentry=config.phase2c_target_reentry,
-            phase3_trigger_premium=config.phase3_trigger_premium,
-            phase3_target_reentry=config.phase3_target_reentry,
-            phase4_trigger_premium=config.phase4_trigger_premium,
-            phase4_target_reentry=config.phase4_target_reentry,
-            stoploss_amount=config.stoploss_amount,
-            margin=config.margin,
-            profit_pct=config.profit_pct,
-            lot_size=config.lot_size,
-        )
+        with redirect_stdout(stdout_buffer):
+            result_df = find_and_backtest.run(
+                entry_datetime=config.entry_datetime,
+                target_premium=config.target_premium,
+                expiry_date=config.expiry_date,
+                exit_datetime=config.exit_datetime,
+                underlying_key=config.underlying_key,
+                option_type=config.option_type,
+                strike_gap=config.strike_gap,
+                tolerance=config.tolerance,
+                hedge_difference=config.hedge_difference,
+                square_off_short_below=config.square_off_when_short_below,
+                short_pair=config.short_pair,
+                phase2_trigger_premium=config.phase2_trigger_premium,
+                phase2_target_reentry=config.phase2_target_reentry,
+                phase2_strike_range=config.phase2_strike_range,
+                phase2b_trigger_premium=config.phase2b_trigger_premium,
+                phase2b_target_reentry=config.phase2b_target_reentry,
+                phase2c_trigger_premium=config.phase2c_trigger_premium,
+                phase2c_target_reentry=config.phase2c_target_reentry,
+                phase3_trigger_premium=config.phase3_trigger_premium,
+                phase3_target_reentry=config.phase3_target_reentry,
+                phase4_trigger_premium=config.phase4_trigger_premium,
+                phase4_target_reentry=config.phase4_target_reentry,
+                stoploss_amount=config.stoploss_amount,
+                margin=config.margin,
+                profit_pct=config.profit_pct,
+                lot_size=config.lot_size,
+            )
+        captured_logs = stdout_buffer.getvalue()
     except SystemExit as e:
         raise HTTPException(status_code=400, detail="Backtest failed: check token and config.")
     except Exception as e:
@@ -258,4 +265,9 @@ def run_backtest(config: BacktestConfig):
                 row[k] = str(v)
             else:
                 row[k] = v
-    return {"data": data, "columns": columns, "summary": summary}
+    if len(captured_logs) > MAX_BACKTEST_LOG_CHARS:
+        captured_logs = (
+            f"[logs truncated to last {MAX_BACKTEST_LOG_CHARS} chars]\n"
+            + captured_logs[-MAX_BACKTEST_LOG_CHARS:]
+        )
+    return {"data": data, "columns": columns, "summary": summary, "logs": captured_logs}

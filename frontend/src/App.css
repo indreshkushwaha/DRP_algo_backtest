@@ -276,6 +276,43 @@ button:disabled {
   color: #ff6b6b;
 }
 
+.run-log-section details {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.run-log-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.backtest-log {
+  margin: 0.75rem 0 0 0;
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: light) {
+  .run-log-section details {
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+  .backtest-log {
+    background: rgba(0, 0, 0, 0.025);
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+}
+
 .phase-help {
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;

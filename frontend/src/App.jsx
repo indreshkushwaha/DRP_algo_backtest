@@ -138,6 +138,7 @@ function App() {
   const [data, setData] = useState([])
   const [columns, setColumns] = useState([])
   const [summary, setSummary] = useState(null)
+  const [backtestLogs, setBacktestLogs] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [backtestLoading, setBacktestLoading] = useState(false)
@@ -260,6 +261,7 @@ function App() {
     setData([])
     setColumns([])
     setSummary(null)
+    setBacktestLogs('')
     setShowGraph(false)
     setBacktestLoading(true)
     const body = {
@@ -302,6 +304,7 @@ function App() {
         setData(res.data || [])
         setColumns(res.columns || [])
         setSummary(res.summary || null)
+        setBacktestLogs(typeof res.logs === 'string' ? res.logs : '')
       })
       .catch((e) => setError(e.message || 'Backtest failed'))
       .finally(() => setBacktestLoading(false))
@@ -323,6 +326,7 @@ function App() {
       summary: { ...summary },
       data: [...data],
       columns: [...columns],
+      logs: backtestLogs,
       margin: config.margin === '' ? null : Number(config.margin),
       savedAt: new Date().toISOString(),
     }
@@ -537,6 +541,15 @@ function App() {
       </section>
 
       {error && <div className="error">{error}</div>}
+      {backtestLogs && (
+        <section className="card run-log-section">
+          <h2>Run log</h2>
+          <details open>
+            <summary>Backtest execution logs</summary>
+            <pre className="backtest-log">{backtestLogs}</pre>
+          </details>
+        </section>
+      )}
 
       {(data.length > 0 && columns.length > 0) && (
         <section className="card table-section">
