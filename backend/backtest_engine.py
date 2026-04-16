@@ -294,6 +294,7 @@ def run_weekly_backtest_phase2(
     )
 
     # State
+    final_squareoff_phase = len(phase_config) + 2  # 1(initial) + re-entry phases + 1(final close)
     ce_short_strike = initial_ce_short_strike
     pe_short_strike = initial_pe_short_strike
     entry_ce_short = None
@@ -303,8 +304,8 @@ def run_weekly_backtest_phase2(
     cumulative_realized = 0.0
     put_pair_phase = 1   # 1 = initial; advance when short CE exceeds next phase trigger
     call_pair_phase = 1  # 1 = initial; advance when short PE exceeds next phase trigger
-    call_pair_squared_off = False  # Phase 4: when True, call pair is closed and PnL zeroed
-    put_pair_squared_off = False  # Phase 4: when True, put pair is closed and PnL zeroed
+    call_pair_squared_off = False  # Final square-off phase: call pair is closed and PnL zeroed
+    put_pair_squared_off = False  # Final square-off phase: put pair is closed and PnL zeroed
 
     rows = []
     reentry_ce = 0
@@ -397,11 +398,11 @@ def run_weekly_backtest_phase2(
         lot_pe_short = pe_short_lots.get(pe_short_strike, 0)
         lot_pe_hedge = pe_hedge_lots.get(pe_short_strike, 0)
 
-        # ---- Phase 4: square off call pair when call premium > trigger (no re-entry) ----
-        # Do not square off this leg if the other leg is already in phase 4; let remaining leg run till expiry.
+        # ---- Final square-off: square off call pair when call premium > trigger (no re-entry) ----
+        # Do not square off this leg if the other leg is already squared off; let remaining leg run till expiry.
         if (
             phase4_trigger_premium is not None
-            and not put_pair_squared_off  # other leg not yet phase 4
+            and not put_pair_squared_off  # other leg not yet squared off
             and not call_pair_squared_off
             and close_ce_short is not None
             and float(close_ce_short) > phase4_trigger_premium
@@ -413,16 +414,16 @@ def run_weekly_backtest_phase2(
             round_pnl = (e_ce - c_ce) * lot_ce_short + (c_ce_h - e_ce_h) * lot_ce_hedge
             cumulative_realized += round_pnl
             call_pair_squared_off = True
-            call_pair_phase = 4  # mark phase as 4 (square-off) for result table
-            print(f"[Phase4] {ts} | Square off CALL pair: short_ce_close={c_ce:.2f} (entry={e_ce:.2f}), "
+            call_pair_phase = final_squareoff_phase  # mark final close phase for result table
+            print(f"[Phase{final_squareoff_phase}] {ts} | Square off CALL pair: short_ce_close={c_ce:.2f} (entry={e_ce:.2f}), "
                   f"hedge_ce_close={c_ce_h:.2f} (entry={e_ce_h:.2f}), "
                   f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
 
-        # ---- Phase 4: square off put pair when put premium > trigger (no re-entry) ----
-        # Do not square off this leg if the other leg is already in phase 4; let remaining leg run till expiry.
+        # ---- Final square-off: square off put pair when put premium > trigger (no re-entry) ----
+        # Do not square off this leg if the other leg is already squared off; let remaining leg run till expiry.
         if (
             phase4_trigger_premium is not None
-            and not call_pair_squared_off  # other leg not yet phase 4
+            and not call_pair_squared_off  # other leg not yet squared off
             and not put_pair_squared_off
             and close_pe_short is not None
             and float(close_pe_short) > phase4_trigger_premium
@@ -434,12 +435,12 @@ def run_weekly_backtest_phase2(
             round_pnl = (e_pe - c_pe) * lot_pe_short + (c_pe_h - e_pe_h) * lot_pe_hedge
             cumulative_realized += round_pnl
             put_pair_squared_off = True
-            put_pair_phase = 4  # mark phase as 4 (square-off) for result table
-            print(f"[Phase4] {ts} | Square off PUT pair: short_pe_close={c_pe:.2f} (entry={e_pe:.2f}), "
+            put_pair_phase = final_squareoff_phase  # mark final close phase for result table
+            print(f"[Phase{final_squareoff_phase}] {ts} | Square off PUT pair: short_pe_close={c_pe:.2f} (entry={e_pe:.2f}), "
                   f"hedge_pe_close={c_pe_h:.2f} (entry={e_pe_h:.2f}), "
                   f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
 
-        # ---- Stoploss: run before re-entry so phase=4 is set and other leg does not advance this bar ----
+        # ---- Stoploss: run before re-entry so final square-off phase is set and other leg does not advance this bar ----
         _c_ce = float(close_ce_short) if close_ce_short is not None else (entry_ce_short or 0.0)
         _c_ce_h = float(close_ce_hedge) if close_ce_hedge is not None else (entry_ce_hedge or 0.0)
         _c_pe = float(close_pe_short) if close_pe_short is not None else (entry_pe_short or 0.0)
@@ -477,21 +478,21 @@ def run_weekly_backtest_phase2(
                 round_pnl_ce = (_e_ce - _c_ce) * lot_ce_short + (_c_ce_h - _e_ce_h) * lot_ce_hedge
                 cumulative_realized += round_pnl_ce
                 call_pair_squared_off = True
-                call_pair_phase = 4  # mark phase as 4 (square-off) for result table
+                call_pair_phase = final_squareoff_phase  # mark final close phase for result table
                 print(f"[Stoploss] {ts} | Square off CALL pair: total_pnl={_total_pnl:.2f} <= -{stoploss_amount}, "
                       f"realized_pnl={round_pnl_ce:.2f}, cumulative={cumulative_realized:.2f}")
             if not put_pair_squared_off:
                 round_pnl_pe = (_e_pe - _c_pe) * lot_pe_short + (_c_pe_h - _e_pe_h) * lot_pe_hedge
                 cumulative_realized += round_pnl_pe
                 put_pair_squared_off = True
-                put_pair_phase = 4  # mark phase as 4 (square-off) for result table
+                put_pair_phase = final_squareoff_phase  # mark final close phase for result table
                 print(f"[Stoploss] {ts} | Square off PUT pair: realized_pnl={round_pnl_pe:.2f}, cumulative={cumulative_realized:.2f}")
 
-        # ---- Phase jumps: when any leg has reached phase 4, do not advance the other leg; backtest continues till expiry ----
-        any_leg_phase4 = call_pair_squared_off or put_pair_squared_off
+        # ---- Phase jumps: when any leg has reached final square-off, do not advance the other leg; backtest continues till expiry ----
+        any_leg_squared_off = call_pair_squared_off or put_pair_squared_off
 
         # ---- Phase-based: short CE exceeds next phase trigger -> cover put pair, re-enter put once ----
-        # Skip when call leg is already in Phase 4 (no phase jump for remaining put leg).
+        # Skip when call leg is already squared off (no phase jump for remaining put leg).
         premium_trigger_ce = (
             close_ce_short is not None
             and put_pair_phase <= len(phase_config)
@@ -501,8 +502,8 @@ def run_weekly_backtest_phase2(
             profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
         )
         if (
-            not any_leg_phase4
-            and call_pair_phase < 4
+            not any_leg_squared_off
+            and call_pair_phase < final_squareoff_phase
             and not call_pair_squared_off
             and put_pair_phase <= len(phase_config)
             and (premium_trigger_ce or profit_trigger_ce)
@@ -552,7 +553,7 @@ def run_weekly_backtest_phase2(
         _recompute_total_pnl_after_rolls()
 
         # ---- Phase-based: short PE exceeds next phase trigger -> cover call pair, re-enter call once ----
-        # Skip when put leg is already in Phase 4 (no phase jump for remaining call leg).
+        # Skip when put leg is already squared off (no phase jump for remaining call leg).
         premium_trigger_pe = (
             close_pe_short is not None
             and call_pair_phase <= len(phase_config)
@@ -560,8 +561,8 @@ def run_weekly_backtest_phase2(
         )
         profit_trigger_pe = profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
         if (
-            not any_leg_phase4
-            and put_pair_phase < 4
+            not any_leg_squared_off
+            and put_pair_phase < final_squareoff_phase
             and not put_pair_squared_off
             and not call_pair_squared_off
             and call_pair_phase <= len(phase_config)
