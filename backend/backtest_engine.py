@@ -240,11 +240,10 @@ def run_weekly_backtest_phase2(
 ):
     """
     Stateful backtest with phase-based re-entry:
-      - When short CE close > trigger (or total PnL >= margin * profit_pct when both set): cover
-        put pair, realize PnL, use underlying LTP at that bar to compute ATM, restrict PE candidates
-        to [ATM - N*gap, ATM + N*gap], pick strike with premium closest to target_reentry, re-enter
-        new put pair.
-      - When short PE close > trigger (or same profit rule): same logic for call pair.
+      - When short CE close > trigger: cover put pair, realize PnL, use underlying LTP at that bar
+        to compute ATM, restrict PE candidates to [ATM - N*gap, ATM + N*gap], pick strike with
+        premium closest to target_reentry, re-enter new put pair.
+      - When short PE close > trigger: same logic for call pair.
     PE hedge = short_strike - hedge_difference (bull put spread).
     CE hedge = short_strike + hedge_difference (bear call spread).
     Candles keyed by short_strike; value = DataFrame (timestamp index, 'close' column).
@@ -287,12 +286,6 @@ def run_weekly_backtest_phase2(
     if phase3_trigger_premium is not None:
         phase_config.append((phase3_trigger_premium, phase3_target_reentry))
 
-    profit_trigger_amount = (
-        (margin * (profit_pct / 100.0))
-        if (margin is not None and profit_pct is not None and margin > 0)
-        else None
-    )
-
     # State
     final_squareoff_phase = len(phase_config) + 2  # 1(initial) + re-entry phases + 1(final close)
     ce_short_strike = initial_ce_short_strike
@@ -310,6 +303,8 @@ def run_weekly_backtest_phase2(
     rows = []
     reentry_ce = 0
     reentry_pe = 0
+    freeze_roll_phase = 6
+    was_phase_roll_frozen = False
 
     def _get_close(filled_dict, strike, ts):
         """Safe lookup: returns float or None."""
@@ -490,6 +485,15 @@ def run_weekly_backtest_phase2(
 
         # ---- Phase jumps: when any leg has reached final square-off, do not advance the other leg; backtest continues till expiry ----
         any_leg_squared_off = call_pair_squared_off or put_pair_squared_off
+        freeze_logged_this_bar = False
+        phase_roll_frozen = call_pair_phase >= freeze_roll_phase or put_pair_phase >= freeze_roll_phase
+        if phase_roll_frozen and not was_phase_roll_frozen:
+            print(
+                f"[PhaseFreeze] {ts} | Rolling disabled because phase_ce={call_pair_phase}, "
+                f"phase_pe={put_pair_phase} reached phase {freeze_roll_phase}"
+            )
+            freeze_logged_this_bar = True
+        can_roll = (not any_leg_squared_off) and (not phase_roll_frozen)
 
         # ---- Phase-based: short CE exceeds next phase trigger -> cover put pair, re-enter put once ----
         # Skip when call leg is already squared off (no phase jump for remaining put leg).
@@ -498,15 +502,12 @@ def run_weekly_backtest_phase2(
             and put_pair_phase <= len(phase_config)
             and float(close_ce_short) > phase_config[put_pair_phase - 1][0]
         )
-        profit_trigger_ce = (
-            profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
-        )
         if (
-            not any_leg_squared_off
+            can_roll
             and call_pair_phase < final_squareoff_phase
             and not call_pair_squared_off
             and put_pair_phase <= len(phase_config)
-            and (premium_trigger_ce or profit_trigger_ce)
+            and premium_trigger_ce
         ):
             next_phase = put_pair_phase + 1
             phase_label = f"[Phase{next_phase}]"
@@ -517,13 +518,7 @@ def run_weekly_backtest_phase2(
             if entry_pe_short is not None:
                 round_pnl = (entry_pe_short - c_pe) * lot_pe_short + (c_pe_h - entry_pe_hedge) * lot_pe_hedge
                 cumulative_realized += round_pnl
-                if premium_trigger_ce:
-                    print(f"{phase_label} {ts} | CE premium trigger: short_ce_close={close_ce_short:.2f} > {trigger_val}")
-                else:
-                    print(
-                        f"{phase_label} {ts} | CE profit trigger: total_pnl={_total_pnl:.2f} >= {profit_trigger_amount} "
-                        f"(short_ce_close={close_ce_short:.2f}, premium trigger would be > {trigger_val})"
-                    )
+                print(f"{phase_label} {ts} | CE premium trigger: short_ce_close={close_ce_short:.2f} > {trigger_val}")
                 print(f"{phase_label}   Cover PUT pair: short_pe_close={c_pe:.2f} (entry={entry_pe_short:.2f}), "
                       f"hedge_pe_close={c_pe_h:.2f} (entry={entry_pe_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
@@ -551,6 +546,13 @@ def run_weekly_backtest_phase2(
                 print(f"{phase_label}   WARNING: No PE strike found for re-entry at {ts}")
 
         _recompute_total_pnl_after_rolls()
+        phase_roll_frozen = call_pair_phase >= freeze_roll_phase or put_pair_phase >= freeze_roll_phase
+        if phase_roll_frozen and not was_phase_roll_frozen and not freeze_logged_this_bar:
+            print(
+                f"[PhaseFreeze] {ts} | Rolling disabled because phase_ce={call_pair_phase}, "
+                f"phase_pe={put_pair_phase} reached phase {freeze_roll_phase}"
+            )
+        can_roll = (not any_leg_squared_off) and (not phase_roll_frozen)
 
         # ---- Phase-based: short PE exceeds next phase trigger -> cover call pair, re-enter call once ----
         # Skip when put leg is already squared off (no phase jump for remaining call leg).
@@ -559,14 +561,13 @@ def run_weekly_backtest_phase2(
             and call_pair_phase <= len(phase_config)
             and float(close_pe_short) > phase_config[call_pair_phase - 1][0]
         )
-        profit_trigger_pe = profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
         if (
-            not any_leg_squared_off
+            can_roll
             and put_pair_phase < final_squareoff_phase
             and not put_pair_squared_off
             and not call_pair_squared_off
             and call_pair_phase <= len(phase_config)
-            and (premium_trigger_pe or profit_trigger_pe)
+            and premium_trigger_pe
         ):
             next_phase = call_pair_phase + 1
             phase_label = f"[Phase{next_phase}]"
@@ -577,13 +578,7 @@ def run_weekly_backtest_phase2(
             if entry_ce_short is not None:
                 round_pnl = (entry_ce_short - c_ce) * lot_ce_short + (c_ce_h - entry_ce_hedge) * lot_ce_hedge
                 cumulative_realized += round_pnl
-                if premium_trigger_pe:
-                    print(f"{phase_label} {ts} | PE premium trigger: short_pe_close={close_pe_short:.2f} > {trigger_val}")
-                else:
-                    print(
-                        f"{phase_label} {ts} | PE profit trigger: total_pnl={_total_pnl:.2f} >= {profit_trigger_amount} "
-                        f"(short_pe_close={close_pe_short:.2f}, premium trigger would be > {trigger_val})"
-                    )
+                print(f"{phase_label} {ts} | PE premium trigger: short_pe_close={close_pe_short:.2f} > {trigger_val}")
                 print(f"{phase_label}   Cover CALL pair: short_ce_close={c_ce:.2f} (entry={entry_ce_short:.2f}), "
                       f"hedge_ce_close={c_ce_h:.2f} (entry={entry_ce_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
@@ -609,6 +604,8 @@ def run_weekly_backtest_phase2(
                 reentry_ce += 1
             else:
                 print(f"{phase_label}   WARNING: No CE strike found for re-entry at {ts}")
+
+        was_phase_roll_frozen = call_pair_phase >= freeze_roll_phase or put_pair_phase >= freeze_roll_phase
 
         # Current lot sizes (may have changed after re-entry)
         lot_ce_short = ce_short_lots.get(ce_short_strike, 0)

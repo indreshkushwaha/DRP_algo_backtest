@@ -195,13 +195,23 @@ button:disabled {
   display: inline-block;
   margin-left: 0.75rem;
   font-size: 0.875rem;
-  color: #22c55e;
   font-weight: 500;
 }
 
+.token-status-ok {
+  color: #22c55e;
+}
+
+.token-status-warn {
+  color: #f59e0b;
+}
+
 @media (prefers-color-scheme: light) {
-  .token-saved-msg {
+  .token-status-ok {
     color: #16a34a;
+  }
+  .token-status-warn {
+    color: #b45309;
   }
 }
 

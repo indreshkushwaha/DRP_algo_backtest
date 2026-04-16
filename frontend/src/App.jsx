@@ -133,7 +133,7 @@ function loadSavedRuns() {
 
 function App() {
   const [token, setToken] = useState('')
-  const [tokenSaved, setTokenSaved] = useState(false)
+  const [tokenStatus, setTokenStatus] = useState(null)
   const [config, setConfig] = useState(defaultConfig)
   const [data, setData] = useState([])
   const [columns, setColumns] = useState([])
@@ -228,7 +228,7 @@ function App() {
 
   const saveToken = () => {
     setError('')
-    setTokenSaved(false)
+    setTokenStatus(null)
     setLoading(true)
     if (tokenSavedTimeoutRef.current) {
       clearTimeout(tokenSavedTimeoutRef.current)
@@ -239,14 +239,19 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ access_token: token }),
     })
-      .then((r) => {
+      .then(async (r) => {
         if (!r.ok) throw new Error('Failed to save token')
+        const res = await r.json()
         setShowTokenForm(false)
-        setTokenSaved(true)
+        setTokenStatus({
+          tokenValid: !!res.token_valid,
+          message: res.message || 'API updated',
+          user: res.user || null,
+        })
         tokenSavedTimeoutRef.current = setTimeout(() => {
-          setTokenSaved(false)
+          setTokenStatus(null)
           tokenSavedTimeoutRef.current = null
-        }, 2500)
+        }, 5000)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -388,7 +393,19 @@ function App() {
             <button type="button" onClick={() => setShowTokenForm(true)} className="btn-secondary">
               Update API token
             </button>
-            {tokenSaved && <span className="token-saved-msg">Token updated</span>}
+            {tokenStatus && (
+              <span className={`token-saved-msg ${tokenStatus.tokenValid ? 'token-status-ok' : 'token-status-warn'}`}>
+                {tokenStatus.message}
+                {tokenStatus.tokenValid && tokenStatus.user && (
+                  <>
+                    {' '}
+                    {tokenStatus.user.user_name || 'Unknown user'}
+                    {tokenStatus.user.user_id ? ` (${tokenStatus.user.user_id})` : ''}
+                    {tokenStatus.user.email ? ` - ${tokenStatus.user.email}` : ''}
+                  </>
+                )}
+              </span>
+            )}
           </>
         ) : (
           <div className="token-form-block">

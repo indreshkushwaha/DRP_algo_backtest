@@ -17,6 +17,7 @@ import time
 from contextlib import redirect_stdout
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -78,6 +79,47 @@ def _write_token(token: str) -> None:
     _trigger_reload()
 
 
+def _fetch_token_user_profile(token: str) -> tuple[bool, dict | None, str | None]:
+    """
+    Validate token by calling Upstox profile endpoint.
+    Returns: (token_valid, user_info, message)
+    """
+    token = (token or "").strip()
+    if not token:
+        return False, None, "Token is empty."
+
+    url = "https://api.upstox.com/v2/user/profile"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        data = response.json() if response.content else {}
+    except requests.RequestException as exc:
+        return False, None, f"Could not validate token: {exc}"
+    except ValueError:
+        data = {}
+
+    if not response.ok:
+        err = data.get("errors") or data.get("error") or data.get("message")
+        if isinstance(err, list) and err:
+            err = err[0]
+        if isinstance(err, dict):
+            err = err.get("message") or str(err)
+        return False, None, f"Token saved, but validation failed: {err or f'HTTP {response.status_code}'}"
+
+    payload = data.get("data") if isinstance(data, dict) else {}
+    if not isinstance(payload, dict):
+        payload = {}
+    user = {
+        "user_name": payload.get("user_name") or "",
+        "email": payload.get("email") or "",
+        "user_id": payload.get("user_id") or "",
+    }
+    return True, user, "API updated and token verified."
+
+
 class TokenUpdate(BaseModel):
     access_token: str = Field(..., description="Upstox API access token")
 
@@ -125,8 +167,15 @@ def get_token():
 @app.put("/api/config/token")
 def put_token(body: TokenUpdate):
     """Save Upstox access token to token_config.py."""
-    _write_token(body.access_token.strip())
-    return {"ok": True}
+    cleaned_token = body.access_token.strip()
+    _write_token(cleaned_token)
+    token_valid, user, message = _fetch_token_user_profile(cleaned_token)
+    return {
+        "ok": True,
+        "token_valid": token_valid,
+        "user": user,
+        "message": message,
+    }
 
 
 def _compute_summary(result_df):
