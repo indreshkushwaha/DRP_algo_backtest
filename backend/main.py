@@ -1,6 +1,14 @@
 """
 FastAPI backend for backtest config and results.
-Run from repo root: uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+Run from the repository root (not from backend/): the code uses package imports
+(`backend.*`). Example:
+
+    cd /path/to/DRP_algo_backtest && source .venv/bin/activate
+    uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+Install deps: pip install -r backend/requirements.txt (from repo root), or
+pip install -r requirements.txt from backend/ (that file includes ../requirements.txt).
 """
 import importlib
 import os

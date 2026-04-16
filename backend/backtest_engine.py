@@ -240,10 +240,11 @@ def run_weekly_backtest_phase2(
 ):
     """
     Stateful backtest with phase-based re-entry:
-      - When short CE close > trigger: cover put pair, realize PnL, use underlying LTP at that
-        bar to compute ATM, restrict PE candidates to [ATM - N*gap, ATM + N*gap], pick strike
-        with premium closest to target_reentry, re-enter new put pair.
-      - When short PE close > trigger: same logic for call pair.
+      - When short CE close > trigger (or total PnL >= margin * profit_pct when both set): cover
+        put pair, realize PnL, use underlying LTP at that bar to compute ATM, restrict PE candidates
+        to [ATM - N*gap, ATM + N*gap], pick strike with premium closest to target_reentry, re-enter
+        new put pair.
+      - When short PE close > trigger (or same profit rule): same logic for call pair.
     PE hedge = short_strike - hedge_difference (bull put spread).
     CE hedge = short_strike + hedge_difference (bear call spread).
     Candles keyed by short_strike; value = DataFrame (timestamp index, 'close' column).
@@ -450,6 +451,27 @@ def run_weekly_backtest_phase2(
         _pnl_ce = ((_e_ce - _c_ce) * lot_ce_short + (_c_ce_h - _e_ce_h) * lot_ce_hedge) if not call_pair_squared_off else 0.0
         _pnl_pe = ((_e_pe - _c_pe) * lot_pe_short + (_c_pe_h - _e_pe_h) * lot_pe_hedge) if not put_pair_squared_off else 0.0
         _total_pnl = cumulative_realized + _pnl_ce + _pnl_pe
+
+        def _recompute_total_pnl_after_rolls():
+            """Refresh MTM totals after CE-side roll so PE block does not reuse stale _total_pnl."""
+            nonlocal _c_ce, _c_ce_h, _c_pe, _c_pe_h, _e_ce, _e_ce_h, _e_pe, _e_pe_h, _pnl_ce, _pnl_pe, _total_pnl
+            nonlocal lot_ce_short, lot_ce_hedge, lot_pe_short, lot_pe_hedge
+            lot_ce_short = ce_short_lots.get(ce_short_strike, 0)
+            lot_ce_hedge = ce_hedge_lots.get(ce_short_strike, 0)
+            lot_pe_short = pe_short_lots.get(pe_short_strike, 0)
+            lot_pe_hedge = pe_hedge_lots.get(pe_short_strike, 0)
+            _c_ce = float(close_ce_short) if close_ce_short is not None else (entry_ce_short or 0.0)
+            _c_ce_h = float(close_ce_hedge) if close_ce_hedge is not None else (entry_ce_hedge or 0.0)
+            _c_pe = float(close_pe_short) if close_pe_short is not None else (entry_pe_short or 0.0)
+            _c_pe_h = float(close_pe_hedge) if close_pe_hedge is not None else (entry_pe_hedge or 0.0)
+            _e_ce = entry_ce_short if entry_ce_short is not None else 0.0
+            _e_ce_h = entry_ce_hedge if entry_ce_hedge is not None else 0.0
+            _e_pe = entry_pe_short if entry_pe_short is not None else 0.0
+            _e_pe_h = entry_pe_hedge if entry_pe_hedge is not None else 0.0
+            _pnl_ce = ((_e_ce - _c_ce) * lot_ce_short + (_c_ce_h - _e_ce_h) * lot_ce_hedge) if not call_pair_squared_off else 0.0
+            _pnl_pe = ((_e_pe - _c_pe) * lot_pe_short + (_c_pe_h - _e_pe_h) * lot_pe_hedge) if not put_pair_squared_off else 0.0
+            _total_pnl = cumulative_realized + _pnl_ce + _pnl_pe
+
         if stoploss_amount is not None and _total_pnl <= -stoploss_amount:
             if not call_pair_squared_off:
                 round_pnl_ce = (_e_ce - _c_ce) * lot_ce_short + (_c_ce_h - _e_ce_h) * lot_ce_hedge
@@ -494,7 +516,13 @@ def run_weekly_backtest_phase2(
             if entry_pe_short is not None:
                 round_pnl = (entry_pe_short - c_pe) * lot_pe_short + (c_pe_h - entry_pe_hedge) * lot_pe_hedge
                 cumulative_realized += round_pnl
-                print(f"{phase_label} {ts} | CE trigger: short_ce_close={close_ce_short:.2f} > {trigger_val}")
+                if premium_trigger_ce:
+                    print(f"{phase_label} {ts} | CE premium trigger: short_ce_close={close_ce_short:.2f} > {trigger_val}")
+                else:
+                    print(
+                        f"{phase_label} {ts} | CE profit trigger: total_pnl={_total_pnl:.2f} >= {profit_trigger_amount} "
+                        f"(short_ce_close={close_ce_short:.2f}, premium trigger would be > {trigger_val})"
+                    )
                 print(f"{phase_label}   Cover PUT pair: short_pe_close={c_pe:.2f} (entry={entry_pe_short:.2f}), "
                       f"hedge_pe_close={c_pe_h:.2f} (entry={entry_pe_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
@@ -521,6 +549,8 @@ def run_weekly_backtest_phase2(
             else:
                 print(f"{phase_label}   WARNING: No PE strike found for re-entry at {ts}")
 
+        _recompute_total_pnl_after_rolls()
+
         # ---- Phase-based: short PE exceeds next phase trigger -> cover call pair, re-enter call once ----
         # Skip when put leg is already in Phase 4 (no phase jump for remaining call leg).
         premium_trigger_pe = (
@@ -528,9 +558,7 @@ def run_weekly_backtest_phase2(
             and call_pair_phase <= len(phase_config)
             and float(close_pe_short) > phase_config[call_pair_phase - 1][0]
         )
-        profit_trigger_pe = (
-            profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
-        )
+        profit_trigger_pe = profit_trigger_amount is not None and _total_pnl >= profit_trigger_amount
         if (
             not any_leg_phase4
             and put_pair_phase < 4
@@ -548,7 +576,13 @@ def run_weekly_backtest_phase2(
             if entry_ce_short is not None:
                 round_pnl = (entry_ce_short - c_ce) * lot_ce_short + (c_ce_h - entry_ce_hedge) * lot_ce_hedge
                 cumulative_realized += round_pnl
-                print(f"{phase_label} {ts} | PE trigger: short_pe_close={close_pe_short:.2f} > {trigger_val}")
+                if premium_trigger_pe:
+                    print(f"{phase_label} {ts} | PE premium trigger: short_pe_close={close_pe_short:.2f} > {trigger_val}")
+                else:
+                    print(
+                        f"{phase_label} {ts} | PE profit trigger: total_pnl={_total_pnl:.2f} >= {profit_trigger_amount} "
+                        f"(short_pe_close={close_pe_short:.2f}, premium trigger would be > {trigger_val})"
+                    )
                 print(f"{phase_label}   Cover CALL pair: short_ce_close={c_ce:.2f} (entry={entry_ce_short:.2f}), "
                       f"hedge_ce_close={c_ce_h:.2f} (entry={entry_ce_hedge:.2f}), "
                       f"realized_pnl={round_pnl:.2f}, cumulative={cumulative_realized:.2f}")
