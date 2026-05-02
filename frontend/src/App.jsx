@@ -168,12 +168,20 @@ function App() {
 
   useEffect(() => {
     fetch(`${API_BASE}/api/config/defaults`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error('defaults request failed')
+        return r.json()
+      })
       .then((d) =>
         setConfig((c) => {
           const next = { ...c }
           for (const [key, val] of Object.entries(d)) {
-            if (val != null) next[key] = val
+            if (val == null) continue
+            if (key === 'margin' || key === 'profit_pct') {
+              next[key] = val === '' ? val : String(val)
+              continue
+            }
+            next[key] = val
           }
           return next
         }),

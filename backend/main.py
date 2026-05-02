@@ -125,10 +125,13 @@ class TokenUpdate(BaseModel):
 
 
 class BacktestConfig(BaseModel):
-    entry_datetime: str = "2025-07-25 14:50:00"
+    # Defaults aligned with frontend `defaultConfig` in App.jsx and computeEntry/ExitDatetime(
+    #   expiry 2025-10-30, entry_day 0 / entry_time 15:00, exit_day 2 / exit_time 15:15
+    # ).
+    entry_datetime: str = "2025-10-27 15:00:00"
     target_premium: float = 50.0
-    expiry_date: str = "2025-07-29"
-    exit_datetime: str | None = None
+    expiry_date: str = "2025-10-30"
+    exit_datetime: str | None = "2025-10-29 15:15:00"
     underlying_key: str = "BSE_INDEX|SENSEX"
     option_type: str = "CE"
     strike_gap: int = 100
@@ -153,9 +156,9 @@ class BacktestConfig(BaseModel):
     phase4_trigger_premium: float | None = 150.0
     phase4_target_reentry: float = 50.0
     stoploss_amount: float | None = 3000.0
-    margin: float | None = 100000.0
-    profit_pct: float | None = 0.75
-    lot_size: int | None = None
+    margin: float | None = 60000.0
+    profit_pct: float | None = 2.0
+    lot_size: int | None = 1
 
 
 @app.get("/api/health")
