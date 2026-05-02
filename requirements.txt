@@ -4,3 +4,4 @@ tabulate
 pandas
 fastapi
 uvicorn
+pymongo

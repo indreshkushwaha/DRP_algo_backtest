@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   LineChart,
   Line,
@@ -154,7 +154,36 @@ function App() {
   const [showGraph, setShowGraph] = useState(true)
   const [showTokenForm, setShowTokenForm] = useState(false)
   const [backendHealthy, setBackendHealthy] = useState(false)
+  const [mongoStorageEnabled, setMongoStorageEnabled] = useState(false)
+  const [serverStoredRuns, setServerStoredRuns] = useState([])
   const tokenSavedTimeoutRef = useRef(null)
+
+  const refreshServerStoredRuns = useCallback(() => {
+    fetch(`${API_BASE}/api/backtest/storage`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        const en = !!d.enabled
+        setMongoStorageEnabled(en)
+        if (!en) {
+          setServerStoredRuns([])
+          return null
+        }
+        return fetch(
+          `${API_BASE}/api/backtest/stored?underlying_key=${encodeURIComponent(config.underlying_key)}`,
+        ).then((r2) => (r2.ok ? r2.json() : Promise.reject()))
+      })
+      .then((listBody) => {
+        if (listBody && Array.isArray(listBody.runs)) setServerStoredRuns(listBody.runs)
+      })
+      .catch(() => {
+        setMongoStorageEnabled(false)
+        setServerStoredRuns([])
+      })
+  }, [config.underlying_key])
+
+  useEffect(() => {
+    refreshServerStoredRuns()
+  }, [refreshServerStoredRuns])
 
   useEffect(() => {
     setSavedRuns(loadSavedRuns())
@@ -344,6 +373,7 @@ function App() {
         setColumns(res.columns || [])
         setSummary(res.summary || null)
         setBacktestLogs(typeof res.logs === 'string' ? res.logs : '')
+        refreshServerStoredRuns()
       })
       .catch((e) => setError(e.message || 'Backtest failed'))
       .finally(() => setBacktestLoading(false))
@@ -389,18 +419,49 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   }
 
+  const hydrateRunFromPayload = (run, expiryDate) => {
+    setData(Array.isArray(run.data) ? run.data : [])
+    setColumns(Array.isArray(run.columns) ? run.columns : [])
+    setBacktestLogs(typeof run.logs === 'string' ? run.logs : '')
+    setSummary(run.summary ?? null)
+    setShowGraph(true)
+    setLoadedSavedExpiryDate(expiryDate)
+    setConfig((c) => ({
+      ...c,
+      expiry_date: expiryDate,
+      margin:
+        run.margin != null && run.margin !== ''
+          ? String(run.margin)
+          : c.margin,
+    }))
+  }
+
   const loadSavedRun = (expiryDate) => {
     const run = savedRuns.find(
       (r) => r.underlying_key === config.underlying_key && r.expiry_date === expiryDate,
     )
     if (!run) return
-    setData(Array.isArray(run.data) ? run.data : [])
-    setColumns(Array.isArray(run.columns) ? run.columns : [])
-    setBacktestLogs(typeof run.logs === 'string' ? run.logs : '')
-    setSummary(run.summary || null)
-    setShowGraph(true)
-    setLoadedSavedExpiryDate(expiryDate)
-    setConfig((c) => ({ ...c, expiry_date: expiryDate, margin: run.margin ?? c.margin }))
+    hydrateRunFromPayload(run, expiryDate)
+  }
+
+  const loadServerRun = (expiryDate) => {
+    setError('')
+    const url = `${API_BASE}/api/backtest/stored?underlying_key=${encodeURIComponent(config.underlying_key)}&expiry_date=${encodeURIComponent(expiryDate)}`
+    fetch(url)
+      .then((r) => {
+        if (!r.ok) {
+          return r.json().then((e) => {
+            const msg =
+              typeof e.detail === 'string' ? e.detail : Array.isArray(e.detail) ? e.detail.map((x) => x.msg || JSON.stringify(x)).join(', ') : 'Load failed'
+            throw new Error(msg)
+          })
+        }
+        return r.json()
+      })
+      .then((body) => {
+        if (body?.run) hydrateRunFromPayload(body.run, expiryDate)
+      })
+      .catch((e) => setError(e.message || 'Failed to load from server'))
   }
 
   const runsForUnderlying = savedRuns.filter((r) => r.underlying_key === config.underlying_key)
@@ -818,6 +879,38 @@ function App() {
                 </table>
               </div>
             </>
+          )}
+        </section>
+      )}
+
+      {mongoStorageEnabled && (
+        <section className="card combined-results-section">
+          <h2>Server-stored backtests (MongoDB)</h2>
+          <p className="combined-hint">
+            Auto-saved after each successful backtest. Use Load from server to open a run in Results (same shape as local Save run, including summary).
+          </p>
+          {serverStoredRuns.length === 0 ? (
+            <p className="combined-hint">No stored runs for this underlying yet.</p>
+          ) : (
+            <div className="expiry-checkboxes">
+              {serverStoredRuns.map((r) => (
+                <div key={`server-${r.expiry_date}`} className="expiry-checkbox-label">
+                  <button
+                    type="button"
+                    onClick={() => loadServerRun(r.expiry_date)}
+                    className="btn-ghost"
+                  >
+                    {r.expiry_date}
+                    {loadedSavedExpiryDate === r.expiry_date ? ' (loaded)' : ''}
+                  </button>
+                  <span className="combined-hint" style={{ marginLeft: 8 }}>
+                    {r.row_count != null ? `${r.row_count} rows` : ''}
+                    {r.saved_at != null ? ` · ${formatDateTime(r.saved_at)}` : ''}
+                    {r.final_pnl != null ? ` · PnL ₹${Number(r.final_pnl).toFixed(2)}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </section>
       )}

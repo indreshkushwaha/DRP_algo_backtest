@@ -12,6 +12,7 @@ pip install -r requirements.txt from backend/ (that file includes ../requirement
 """
 import importlib
 import io
+import logging
 import os
 import time
 from contextlib import redirect_stdout
@@ -33,7 +34,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from . import get_token  # noqa: F401 — ensures backend/token_config.py exists
+from . import mongo_backtests
 from . import token_config
+from .config import MONGODB_URI
 
 app = FastAPI(title="Upstox Backtest API")
 app.add_middleware(
@@ -328,4 +331,44 @@ def run_backtest(config: BacktestConfig):
             f"[logs truncated to last {MAX_BACKTEST_LOG_CHARS} chars]\n"
             + captured_logs[-MAX_BACKTEST_LOG_CHARS:]
         )
-    return {"data": data, "columns": columns, "summary": summary, "logs": captured_logs}
+    response_body = {"data": data, "columns": columns, "summary": summary, "logs": captured_logs}
+    if (MONGODB_URI or "").strip():
+        try:
+            mongo_backtests.save_run(
+                config.underlying_key,
+                config.expiry_date,
+                config.margin,
+                config.model_dump(),
+                response_body,
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning("MongoDB save failed: %s", e, exc_info=True)
+    return response_body
+
+
+@app.get("/api/backtest/storage")
+def backtest_storage_status():
+    """Whether optional MongoDB persistence is configured (non-empty URI in backend/config.py)."""
+    return {"enabled": bool((MONGODB_URI or "").strip())}
+
+
+@app.get("/api/backtest/stored")
+def list_or_get_stored_backtest(
+    underlying_key: str | None = Query(None, description="Underlying key, e.g. BSE_INDEX|SENSEX"),
+    expiry_date: str | None = Query(None, description="Expiry YYYY-MM-DD; omit to list all stored for underlying"),
+):
+    """List stored runs for an underlying, or fetch one run when expiry_date is set. Query params avoid | in paths."""
+    enabled = bool((MONGODB_URI or "").strip())
+    if not enabled:
+        if expiry_date and underlying_key:
+            return {"enabled": False, "run": None}
+        return {"enabled": False, "runs": []}
+    if not underlying_key:
+        raise HTTPException(status_code=400, detail="underlying_key is required when storage is enabled")
+    if expiry_date is None:
+        runs = mongo_backtests.list_runs_for_underlying(underlying_key)
+        return {"enabled": True, "runs": runs}
+    doc = mongo_backtests.get_run(underlying_key, expiry_date)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Stored backtest not found")
+    return {"enabled": True, "run": mongo_backtests.serialize_run_for_api(doc)}
