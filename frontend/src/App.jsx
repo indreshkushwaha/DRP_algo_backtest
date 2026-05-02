@@ -58,9 +58,9 @@ function formatDateTime(str) {
   return dot >= 0 ? withoutT.slice(0, dot) : withoutT
 }
 
-const DEFAULT_MARGIN_FOR_PCT = 100000
+const DEFAULT_MARGIN_FOR_PCT = 60000
 
-/** Margin used for % on PnL: positive finite number, else default 100000. */
+/** Margin used for % on PnL: positive finite number, else default 60000. */
 function effectiveMarginForPct(value) {
   if (value === '' || value == null) return DEFAULT_MARGIN_FOR_PCT
   const n = Number(value)
@@ -89,11 +89,11 @@ function defaultExpiryToDate() {
 
 const defaultConfig = {
   entry_day: 0,
-  entry_time: '13:15',
+  entry_time: '15:00',
   exit_day: 2,
-  exit_time: '14:10',
+  exit_time: '15:15',
   target_premium: 50,
-  expiry_date: '2025-07-29',
+  expiry_date: '2025-10-30',
   underlying_key: 'BSE_INDEX|SENSEX',
   option_type: 'CE',
   strike_gap: 100,
@@ -101,20 +101,20 @@ const defaultConfig = {
   hedge_difference: 300,
   square_off_when_short_below: 145,
   short_pair: true,
-  phase2_trigger_premium: 68,
+  phase2_trigger_premium: 76,
   phase2_target_reentry: 50,
   phase2_strike_range: 15,
-  phase2b_trigger_premium: 75,
+  phase2b_trigger_premium: 98,
   phase2b_target_reentry: 50,
-  phase2c_trigger_premium: 88,
+  phase2c_trigger_premium: 115,
   phase2c_target_reentry: 50,
-  phase3_trigger_premium: 98,
+  phase3_trigger_premium: 134,
   phase3_target_reentry: 50,
-  phase4_trigger_premium: 115,
+  phase4_trigger_premium: 150,
   phase4_target_reentry: 50,
-  stoploss_amount: 5000,
-  margin: '100000',
-  profit_pct: '0.75',
+  stoploss_amount: 3000,
+  margin: '60000',
+  profit_pct: '2',
   lot_size: 1,
 }
 
@@ -300,12 +300,12 @@ function App() {
       entry_datetime: computeEntryDatetime(
         config.expiry_date,
         config.entry_day ?? 0,
-        config.entry_time ?? '13:15',
+        config.entry_time ?? '15:00',
       ),
       exit_datetime: computeExitDatetime(
         config.expiry_date,
         config.exit_day ?? 2,
-        config.exit_time ?? '14:10',
+        config.exit_time ?? '15:15',
       ),
       hedge_difference: config.hedge_difference === '' ? null : Number(config.hedge_difference),
       square_off_when_short_below: config.square_off_when_short_below === '' ? null : Number(config.square_off_when_short_below),
@@ -504,7 +504,7 @@ function App() {
           </label>
           <label>
             Entry time
-            <input type="time" value={config.entry_time ?? '13:15'} onChange={(e) => updateConfig('entry_time', e.target.value)} />
+            <input type="time" value={config.entry_time ?? '15:00'} onChange={(e) => updateConfig('entry_time', e.target.value)} />
           </label>
           <label>
             Exit day
@@ -516,7 +516,7 @@ function App() {
           </label>
           <label>
             Exit time
-            <input type="time" value={config.exit_time ?? '14:10'} onChange={(e) => updateConfig('exit_time', e.target.value)} />
+            <input type="time" value={config.exit_time ?? '15:15'} onChange={(e) => updateConfig('exit_time', e.target.value)} />
           </label>
           <label>
             Expiry date
@@ -585,11 +585,11 @@ function App() {
           </label>
           <label>
             Margin
-            <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 100000" />
+            <input type="number" value={config.margin ?? ''} onChange={(e) => updateConfig('margin', e.target.value)} placeholder="e.g. 60000" />
           </label>
           <label>
             Profit %
-            <input type="number" step="0.01" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 0.75" />
+            <input type="number" step="0.01" value={config.profit_pct ?? ''} onChange={(e) => updateConfig('profit_pct', e.target.value)} placeholder="e.g. 2" />
           </label>
           <label>
             Profit amount (₹)
