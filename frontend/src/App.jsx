@@ -346,7 +346,19 @@ function App() {
       const num = Number(value)
       if (!Number.isNaN(num) && num < 1) value = 1
     }
-    setConfig((c) => ({ ...c, [key]: value }))
+    setConfig((c) => {
+      if (key !== 'lot_size') {
+        return { ...c, [key]: value }
+      }
+      if (value === '') {
+        return { ...c, lot_size: value }
+      }
+      const n = Number(value)
+      if (Number.isNaN(n) || n < 1) {
+        return { ...c, lot_size: value }
+      }
+      return { ...c, lot_size: value, margin: String((n / 20) * 60000) }
+    })
   }
 
   const saveRun = () => {
