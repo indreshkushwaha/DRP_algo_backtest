@@ -356,6 +356,7 @@ def backtest_storage_status():
 def list_or_get_stored_backtest(
     underlying_key: str | None = Query(None, description="Underlying key, e.g. BSE_INDEX|SENSEX"),
     expiry_date: str | None = Query(None, description="Expiry YYYY-MM-DD; omit to list all stored for underlying"),
+    include_deleted: bool = Query(False, description="Include soft-deleted runs"),
 ):
     """List stored runs for an underlying, or fetch one run when expiry_date is set. Query params avoid | in paths."""
     enabled = bool((MONGODB_URI or "").strip())
@@ -366,9 +367,31 @@ def list_or_get_stored_backtest(
     if not underlying_key:
         raise HTTPException(status_code=400, detail="underlying_key is required when storage is enabled")
     if expiry_date is None:
-        runs = mongo_backtests.list_runs_for_underlying(underlying_key)
+        runs = mongo_backtests.list_runs_for_underlying(
+            underlying_key,
+            include_deleted=include_deleted,
+        )
         return {"enabled": True, "runs": runs}
-    doc = mongo_backtests.get_run(underlying_key, expiry_date)
+    doc = mongo_backtests.get_run(
+        underlying_key,
+        expiry_date,
+        include_deleted=include_deleted,
+    )
     if not doc:
         raise HTTPException(status_code=404, detail="Stored backtest not found")
     return {"enabled": True, "run": mongo_backtests.serialize_run_for_api(doc)}
+
+
+@app.delete("/api/backtest/stored")
+def delete_stored_backtest(
+    underlying_key: str = Query(..., description="Underlying key, e.g. BSE_INDEX|SENSEX"),
+    expiry_date: str = Query(..., description="Expiry YYYY-MM-DD"),
+):
+    """Soft-delete one stored run for the selected underlying/expiry."""
+    enabled = bool((MONGODB_URI or "").strip())
+    if not enabled:
+        return {"enabled": False, "deleted": False}
+    deleted = mongo_backtests.soft_delete_run(underlying_key, expiry_date)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Stored backtest not found")
+    return {"enabled": True, "deleted": True}

@@ -57,6 +57,8 @@ def save_run(
             "underlying_key": underlying_key,
             "expiry_date": expiry_date,
             "saved_at": datetime.now(timezone.utc).isoformat(),
+            "deleted": False,
+            "deleted_at": None,
             "row_count": len(data) if isinstance(data, list) else 0,
             "data": payload.get("data"),
             "columns": payload.get("columns"),
@@ -76,13 +78,19 @@ def save_run(
         logger.warning("MongoDB save_run failed: %s", e, exc_info=True)
 
 
-def list_runs_for_underlying(underlying_key: str) -> list[dict[str, Any]]:
+def list_runs_for_underlying(
+    underlying_key: str,
+    include_deleted: bool = False,
+) -> list[dict[str, Any]]:
     coll = _collection()
     if coll is None:
         return []
     try:
         out: list[dict[str, Any]] = []
-        for doc in coll.find({"underlying_key": underlying_key}, projection={"data": 0, "logs": 0, "config": 0}):
+        query: dict[str, Any] = {"underlying_key": underlying_key}
+        if not include_deleted:
+            query["$or"] = [{"deleted": {"$exists": False}}, {"deleted": False}]
+        for doc in coll.find(query, projection={"data": 0, "logs": 0, "config": 0}):
             summary = doc.get("summary") or {}
             fp = summary.get("final_pnl")
             out.append(
@@ -91,6 +99,8 @@ def list_runs_for_underlying(underlying_key: str) -> list[dict[str, Any]]:
                     "saved_at": doc.get("saved_at"),
                     "final_pnl": fp,
                     "row_count": doc.get("row_count"),
+                    "deleted": bool(doc.get("deleted", False)),
+                    "deleted_at": doc.get("deleted_at"),
                 }
             )
         return out
@@ -99,12 +109,19 @@ def list_runs_for_underlying(underlying_key: str) -> list[dict[str, Any]]:
         return []
 
 
-def get_run(underlying_key: str, expiry_date: str) -> dict[str, Any] | None:
+def get_run(
+    underlying_key: str,
+    expiry_date: str,
+    include_deleted: bool = False,
+) -> dict[str, Any] | None:
     coll = _collection()
     if coll is None:
         return None
     try:
-        doc = coll.find_one({"underlying_key": underlying_key, "expiry_date": expiry_date})
+        query: dict[str, Any] = {"underlying_key": underlying_key, "expiry_date": expiry_date}
+        if not include_deleted:
+            query["$or"] = [{"deleted": {"$exists": False}}, {"deleted": False}]
+        doc = coll.find_one(query)
         if not doc:
             return None
         doc.pop("_id", None)
@@ -112,6 +129,31 @@ def get_run(underlying_key: str, expiry_date: str) -> dict[str, Any] | None:
     except PyMongoError as e:
         logger.warning("MongoDB get_run failed: %s", e, exc_info=True)
         return None
+
+
+def soft_delete_run(underlying_key: str, expiry_date: str) -> bool:
+    """Soft-delete one stored run by setting deleted flags."""
+    coll = _collection()
+    if coll is None:
+        return False
+    try:
+        result = coll.update_one(
+            {
+                "underlying_key": underlying_key,
+                "expiry_date": expiry_date,
+                "$or": [{"deleted": {"$exists": False}}, {"deleted": False}],
+            },
+            {
+                "$set": {
+                    "deleted": True,
+                    "deleted_at": datetime.now(timezone.utc).isoformat(),
+                }
+            },
+        )
+        return bool(result.modified_count)
+    except PyMongoError as e:
+        logger.warning("MongoDB soft_delete_run failed: %s", e, exc_info=True)
+        return False
 
 
 def serialize_run_for_api(doc: dict[str, Any]) -> dict[str, Any]:

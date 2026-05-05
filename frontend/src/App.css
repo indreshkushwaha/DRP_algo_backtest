@@ -23,6 +23,17 @@
   gap: 1rem;
 }
 
+.app-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hide-sensitive-btn {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 .backend-health-indicator {
   display: inline-flex;
   align-items: center;
@@ -612,6 +623,115 @@ tbody tr:hover {
 .expiry-checkbox-label input {
   width: auto;
   margin: 0;
+}
+
+.delete-server-run-btn {
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  background-color: rgba(255, 80, 80, 0.15);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 80, 80, 0.4);
+}
+
+.delete-server-run-btn:hover:not(:disabled) {
+  background-color: rgba(255, 80, 80, 0.25);
+}
+
+@media (prefers-color-scheme: light) {
+  .delete-server-run-btn {
+    background-color: rgba(255, 80, 80, 0.1);
+    color: #c92a2a;
+    border-color: rgba(255, 80, 80, 0.35);
+  }
+  .delete-server-run-btn:hover:not(:disabled) {
+    background-color: rgba(255, 80, 80, 0.2);
+  }
+}
+
+.delete-saved-run-btn {
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  background-color: rgba(255, 80, 80, 0.15);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 80, 80, 0.4);
+}
+
+.delete-saved-run-btn:hover:not(:disabled) {
+  background-color: rgba(255, 80, 80, 0.25);
+}
+
+@media (prefers-color-scheme: light) {
+  .delete-saved-run-btn {
+    background-color: rgba(255, 80, 80, 0.1);
+    color: #c92a2a;
+    border-color: rgba(255, 80, 80, 0.35);
+  }
+  .delete-saved-run-btn:hover:not(:disabled) {
+    background-color: rgba(255, 80, 80, 0.2);
+  }
+}
+
+.server-runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.server-run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.server-run-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.server-run-expiry-btn {
+  padding: 0.25rem 0.45rem;
+}
+
+.server-run-meta {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.server-run-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (prefers-color-scheme: light) {
+  .server-run-row {
+    border-color: rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.02);
+  }
+  .server-run-meta {
+    color: rgba(0, 0, 0, 0.65);
+  }
+}
+
+@media (max-width: 720px) {
+  .server-run-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .server-run-actions {
+    width: 100%;
+  }
 }
 
 .combined-summary {

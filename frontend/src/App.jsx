@@ -154,6 +154,7 @@ function App() {
   const [showGraph, setShowGraph] = useState(true)
   const [showTokenForm, setShowTokenForm] = useState(false)
   const [backendHealthy, setBackendHealthy] = useState(false)
+  const [hideSensitive, setHideSensitive] = useState(false)
   const [mongoStorageEnabled, setMongoStorageEnabled] = useState(false)
   const [serverStoredRuns, setServerStoredRuns] = useState([])
   const tokenSavedTimeoutRef = useRef(null)
@@ -464,6 +465,37 @@ function App() {
       .catch((e) => setError(e.message || 'Failed to load from server'))
   }
 
+  const deleteServerRun = (expiryDate) => {
+    if (
+      typeof window === 'undefined' ||
+      !window.confirm(`Delete stored run for ${expiryDate}? This cannot be undone.`)
+    ) {
+      return
+    }
+    setError('')
+    const url = `${API_BASE}/api/backtest/stored?underlying_key=${encodeURIComponent(config.underlying_key)}&expiry_date=${encodeURIComponent(expiryDate)}`
+    fetch(url, { method: 'DELETE' })
+      .then((r) => {
+        if (!r.ok) {
+          return r.json().then((e) => {
+            const msg =
+              typeof e.detail === 'string'
+                ? e.detail
+                : Array.isArray(e.detail)
+                  ? e.detail.map((x) => x.msg || JSON.stringify(x)).join(', ')
+                  : 'Delete failed'
+            throw new Error(msg)
+          })
+        }
+        return r.json()
+      })
+      .then(() => {
+        setServerStoredRuns((prev) => prev.filter((run) => run.expiry_date !== expiryDate))
+        if (loadedSavedExpiryDate === expiryDate) setLoadedSavedExpiryDate('')
+      })
+      .catch((e) => setError(e.message || 'Failed to delete from server'))
+  }
+
   const runsForUnderlying = savedRuns.filter((r) => r.underlying_key === config.underlying_key)
   const selectedRuns = runsForUnderlying.filter((r) => selectedExpiriesForCombine.includes(r.expiry_date))
 
@@ -488,16 +520,41 @@ function App() {
     localStorage.setItem(STORAGE_KEY, '[]')
   }
 
+  const deleteSavedRun = (expiryDate) => {
+    if (
+      typeof window === 'undefined' ||
+      !window.confirm(`Delete saved run for ${expiryDate}? This cannot be undone.`)
+    ) {
+      return
+    }
+    const next = savedRuns.filter(
+      (r) => !(r.underlying_key === config.underlying_key && r.expiry_date === expiryDate),
+    )
+    setSavedRuns(next)
+    setSelectedExpiriesForCombine((prev) => prev.filter((e) => e !== expiryDate))
+    if (loadedSavedExpiryDate === expiryDate) setLoadedSavedExpiryDate('')
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  }
+
   return (
     <div className="app">
       <div className="app-header">
         <h1>Upstox Backtest</h1>
-        <div
-          className="backend-health-indicator"
-          title={`Backend ${backendHealthy ? 'Online' : 'Offline'}`}
-          aria-label={`Backend ${backendHealthy ? 'Online' : 'Offline'}`}
-        >
-          <span className={`backend-health-dot ${backendHealthy ? 'is-healthy' : 'is-unhealthy'}`} />
+        <div className="app-header-actions">
+          <button
+            type="button"
+            onClick={() => setHideSensitive((s) => !s)}
+            className="btn-secondary hide-sensitive-btn"
+          >
+            {hideSensitive ? 'Show sensitive' : 'Hide sensitive'}
+          </button>
+          <div
+            className="backend-health-indicator"
+            title={`Backend ${backendHealthy ? 'Online' : 'Offline'}`}
+            aria-label={`Backend ${backendHealthy ? 'Online' : 'Offline'}`}
+          >
+            <span className={`backend-health-dot ${backendHealthy ? 'is-healthy' : 'is-unhealthy'}`} />
+          </div>
         </div>
       </div>
 
@@ -622,47 +679,118 @@ function App() {
           </label>
           <label>
             Hedge difference
-            <input type="number" value={config.hedge_difference ?? ''} onChange={(e) => updateConfig('hedge_difference', e.target.value)} placeholder="or empty" />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              value={hideSensitive ? 'XXX' : (config.hedge_difference ?? '')}
+              onChange={(e) => updateConfig('hedge_difference', e.target.value)}
+              placeholder="or empty"
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 1 trigger
-            <input type="number" step="0.1" value={config.phase2_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)} placeholder="or empty" />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : (config.phase2_trigger_premium ?? '')}
+              onChange={(e) => updateConfig('phase2_trigger_premium', e.target.value)}
+              placeholder="or empty"
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 1 re-entry
-            <input type="number" step="0.1" value={config.phase2_target_reentry} onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)} />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : config.phase2_target_reentry}
+              onChange={(e) => updateConfig('phase2_target_reentry', e.target.value)}
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 2 trigger
-            <input type="number" step="0.1" value={config.phase2b_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2b_trigger_premium', e.target.value)} placeholder="or empty" />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : (config.phase2b_trigger_premium ?? '')}
+              onChange={(e) => updateConfig('phase2b_trigger_premium', e.target.value)}
+              placeholder="or empty"
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 2 re-entry
-            <input type="number" step="0.1" value={config.phase2b_target_reentry} onChange={(e) => updateConfig('phase2b_target_reentry', e.target.value)} />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : config.phase2b_target_reentry}
+              onChange={(e) => updateConfig('phase2b_target_reentry', e.target.value)}
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 3 trigger
-            <input type="number" step="0.1" value={config.phase2c_trigger_premium ?? ''} onChange={(e) => updateConfig('phase2c_trigger_premium', e.target.value)} placeholder="or empty" />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : (config.phase2c_trigger_premium ?? '')}
+              onChange={(e) => updateConfig('phase2c_trigger_premium', e.target.value)}
+              placeholder="or empty"
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 3 re-entry
-            <input type="number" step="0.1" value={config.phase2c_target_reentry} onChange={(e) => updateConfig('phase2c_target_reentry', e.target.value)} />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : config.phase2c_target_reentry}
+              onChange={(e) => updateConfig('phase2c_target_reentry', e.target.value)}
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 4 trigger
-            <input type="number" step="0.1" value={config.phase3_trigger_premium ?? ''} onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)} placeholder="or empty" />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : (config.phase3_trigger_premium ?? '')}
+              onChange={(e) => updateConfig('phase3_trigger_premium', e.target.value)}
+              placeholder="or empty"
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 4 re-entry
-            <input type="number" step="0.1" value={config.phase3_target_reentry} onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)} />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : config.phase3_target_reentry}
+              onChange={(e) => updateConfig('phase3_target_reentry', e.target.value)}
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Adjustment 5 close position
-            <input type="number" step="0.1" value={config.phase4_trigger_premium ?? ''} onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)} placeholder="or empty" />
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              step={hideSensitive ? undefined : '0.1'}
+              value={hideSensitive ? 'XXX' : (config.phase4_trigger_premium ?? '')}
+              onChange={(e) => updateConfig('phase4_trigger_premium', e.target.value)}
+              placeholder="or empty"
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
-            Stoploss amount
-            <input type="number" value={config.stoploss_amount ?? ''} onChange={(e) => updateConfig('stoploss_amount', e.target.value)} placeholder="or empty" />
+            Stop loss amount
+            <input
+              type={hideSensitive ? 'text' : 'number'}
+              value={hideSensitive ? 'XXX' : (config.stoploss_amount ?? '')}
+              onChange={(e) => updateConfig('stoploss_amount', e.target.value)}
+              placeholder="or empty"
+              readOnly={hideSensitive}
+            />
           </label>
           <label>
             Margin
@@ -852,6 +980,13 @@ function App() {
                     {r.expiry_date}
                     {loadedSavedExpiryDate === r.expiry_date ? ' (loaded)' : ''}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteSavedRun(r.expiry_date)}
+                    className="delete-saved-run-btn"
+                  >
+                    Delete
+                  </button>
                 </label>
               ))}
             </div>
@@ -892,22 +1027,33 @@ function App() {
           {serverStoredRuns.length === 0 ? (
             <p className="combined-hint">No stored runs for this underlying yet.</p>
           ) : (
-            <div className="expiry-checkboxes">
+            <div className="server-runs-list">
               {serverStoredRuns.map((r) => (
-                <div key={`server-${r.expiry_date}`} className="expiry-checkbox-label">
-                  <button
-                    type="button"
-                    onClick={() => loadServerRun(r.expiry_date)}
-                    className="btn-ghost"
-                  >
-                    {r.expiry_date}
-                    {loadedSavedExpiryDate === r.expiry_date ? ' (loaded)' : ''}
-                  </button>
-                  <span className="combined-hint" style={{ marginLeft: 8 }}>
-                    {r.row_count != null ? `${r.row_count} rows` : ''}
-                    {r.saved_at != null ? ` · ${formatDateTime(r.saved_at)}` : ''}
-                    {r.final_pnl != null ? ` · PnL ₹${Number(r.final_pnl).toFixed(2)}` : ''}
-                  </span>
+                <div key={`server-${r.expiry_date}`} className="server-run-row">
+                  <div className="server-run-main">
+                    <button
+                      type="button"
+                      onClick={() => loadServerRun(r.expiry_date)}
+                      className="btn-ghost server-run-expiry-btn"
+                    >
+                      {r.expiry_date}
+                      {loadedSavedExpiryDate === r.expiry_date ? ' (loaded)' : ''}
+                    </button>
+                    <span className="server-run-meta">
+                      {r.row_count != null ? `${r.row_count} rows` : ''}
+                      {r.saved_at != null ? ` · ${formatDateTime(r.saved_at)}` : ''}
+                      {r.final_pnl != null ? ` · PnL ₹${Number(r.final_pnl).toFixed(2)}` : ''}
+                    </span>
+                  </div>
+                  <div className="server-run-actions">
+                    <button
+                      type="button"
+                      onClick={() => deleteServerRun(r.expiry_date)}
+                      className="delete-server-run-btn"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
